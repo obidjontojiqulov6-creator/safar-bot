@@ -4,7 +4,8 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 
 # Bu yerga BotFather'dan olgan tokeningizni yozasiz
-TOKEN = "TOKEN_INGIZNI_SHU_YERGA_YOZING"
+import os
+TOKEN = os.getenv("BOT_TOKEN")
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
