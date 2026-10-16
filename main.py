@@ -22,9 +22,9 @@ class BookingState(StatesGroup):
 
 # O'zbekistonning barcha viloyat markazlari va asosiy shaharlari
 CITIES = [
-    "Toshkent", "Andijon", "Buxoro", "Termiz", 
-    "Nukus", "Farg'ona", "Namangan", "Samarqand", 
-    "Jizzax", "Navoiy", "Qarshi", "Urganch"
+    "Toshkent", "Andijon", "Buxoro", "Jizzax", 
+    "Navoiy", "Namangan", "Qarshi", "Samarqand", 
+    "Guliston", "Termiz", "Urganch", "Nukus"
 ]
 
 @dp.message(Command("start"))
@@ -55,7 +55,7 @@ async def select_language(message: types.Message, state: FSMContext):
     builder.button(text="🔙 Orqaga")
     builder.adjust(2, 2, 2, 2, 2, 2, 1)
 
-    text = "📍 Qayerdan jo'naysiz? Shaharni tanlang:" if lang == "uz" else "📍 Откуда выезжаете? Выберите город:"
+    text = "📍 Qayerdan jo'naysiz? Hududni tanlang:" if lang == "uz" else "📍 Откуда выезжаете? Выберите регион:"
     await message.answer(text, reply_markup=builder.as_markup(resize_keyboard=True))
 
 @dp.message(BookingState.waiting_for_from_city)
@@ -64,7 +64,7 @@ async def select_from_city(message: types.Message, state: FSMContext):
         return await cmd_start(message, state)
     
     if message.text not in CITIES:
-        return await message.answer("Iltimos, tugmalardagi shaharlardan birini tanlang yoki 'Orqaga'ni bosing.")
+        return await message.answer("Iltimos, tugmalardagi hududlardan birini tanlang yoki 'Orqaga'ni bosing.")
 
     await state.update_data(from_city=message.text)
     await state.set_state(BookingState.waiting_for_to_city)
@@ -91,10 +91,10 @@ async def select_to_city(message: types.Message, state: FSMContext):
             builder.button(text=city)
         builder.button(text="🔙 Orqaga")
         builder.adjust(2, 2, 2, 2, 2, 2, 1)
-        return await message.answer("📍 Qayerdan jo'naysiz? Shaharni tanlang:", reply_markup=builder.as_markup(resize_keyboard=True))
+        return await message.answer("📍 Qayerdan jo'naysiz? Hududni tanlang:", reply_markup=builder.as_markup(resize_keyboard=True))
 
     if message.text not in CITIES:
-        return await message.answer("Iltimos, ro'yxatdagi shaharlardan birini tanlang.")
+        return await message.answer("Iltimos, ro'yxatdagi hududlardan birini tanlang.")
 
     await state.update_data(to_city=message.text)
     await state.set_state(BookingState.waiting_for_passengers)
