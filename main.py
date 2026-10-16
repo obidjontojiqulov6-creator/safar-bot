@@ -36,6 +36,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
     builder.button(text="🇷🇺 Русский")
     builder.adjust(2)
     
+    # Avvalgi klaviaturalarni olib tashlab, til tanlashni chiqaramiz
     await message.answer(
         "Assalomu alaykum! Safar taksi xizmatiga xush kelibsiz.\n"
         "Tilni tanlang / Пожалуйста, выберите язык:",
