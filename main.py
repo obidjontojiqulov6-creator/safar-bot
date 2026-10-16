@@ -12,7 +12,6 @@ TOKEN = os.getenv("BOT_TOKEN")
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# Bot bosqichlari (FSM)
 class BookingState(StatesGroup):
     waiting_for_lang = State()
     waiting_for_from_city = State()
@@ -21,10 +20,13 @@ class BookingState(StatesGroup):
     waiting_for_price = State()
     waiting_for_contact = State()
 
-# Shaharlar ro'yxati
-CITIES = ["Toshkent", "Andijon", "Buxoro", "Surxondaryo", "Nukus", "Farg'ona", "Namangan", "Samarqand"]
+# O'zbekistonning barcha viloyat markazlari va asosiy shaharlari
+CITIES = [
+    "Toshkent", "Andijon", "Buxoro", "Termiz", 
+    "Nukus", "Farg'ona", "Namangan", "Samarqand", 
+    "Jizzax", "Navoiy", "Qarshi", "Urganch"
+]
 
-# /start buyrug'i
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message, state: FSMContext):
     await state.clear()
@@ -41,7 +43,6 @@ async def cmd_start(message: types.Message, state: FSMContext):
         reply_markup=builder.as_markup(resize_keyboard=True)
     )
 
-# Til tanlanganda
 @dp.message(BookingState.waiting_for_lang, F.text.in_(["🇺🇿 O'zbekcha", "🇷🇺 Русский"]))
 async def select_language(message: types.Message, state: FSMContext):
     lang = "uz" if "O'zbekcha" in message.text else "ru"
@@ -52,12 +53,11 @@ async def select_language(message: types.Message, state: FSMContext):
     for city in CITIES:
         builder.button(text=city)
     builder.button(text="🔙 Orqaga")
-    builder.adjust(2, 2, 2, 2, 1)
+    builder.adjust(2, 2, 2, 2, 2, 2, 1)
 
     text = "📍 Qayerdan jo'naysiz? Shaharni tanlang:" if lang == "uz" else "📍 Откуда выезжаете? Выберите город:"
     await message.answer(text, reply_markup=builder.as_markup(resize_keyboard=True))
 
-# Qayerdan tanlanganda
 @dp.message(BookingState.waiting_for_from_city)
 async def select_from_city(message: types.Message, state: FSMContext):
     if message.text == "🔙 Orqaga":
@@ -74,15 +74,14 @@ async def select_from_city(message: types.Message, state: FSMContext):
 
     builder = ReplyKeyboardBuilder()
     for city in CITIES:
-        if city != message.text: # Chiqish va borish shahri bir xil bo'lmasligi uchun
+        if city != message.text:
             builder.button(text=city)
     builder.button(text="🔙 Orqaga")
-    builder.adjust(2, 2, 2, 2, 1)
+    builder.adjust(2, 2, 2, 2, 2, 2, 1)
 
     text = f"🏁 Qayerga borasiz? (Jo'nash: {message.text})" if lang == "uz" else f"🏁 Куда едем? (Откуда: {message.text})"
     await message.answer(text, reply_markup=builder.as_markup(resize_keyboard=True))
 
-# Qayerga tanlanganda
 @dp.message(BookingState.waiting_for_to_city)
 async def select_to_city(message: types.Message, state: FSMContext):
     if message.text == "🔙 Orqaga":
@@ -91,7 +90,7 @@ async def select_to_city(message: types.Message, state: FSMContext):
         for city in CITIES:
             builder.button(text=city)
         builder.button(text="🔙 Orqaga")
-        builder.adjust(2, 2, 2, 2, 1)
+        builder.adjust(2, 2, 2, 2, 2, 2, 1)
         return await message.answer("📍 Qayerdan jo'naysiz? Shaharni tanlang:", reply_markup=builder.as_markup(resize_keyboard=True))
 
     if message.text not in CITIES:
@@ -110,7 +109,6 @@ async def select_to_city(message: types.Message, state: FSMContext):
 
     await message.answer("👥 Necha kishilik joy kerak? (Odam sonini tanlang):", reply_markup=builder.as_markup(resize_keyboard=True))
 
-# Odam soni tanlanganda
 @dp.message(BookingState.waiting_for_passengers, F.text.in_(["1", "2", "3", "4"]))
 async def select_passengers(message: types.Message, state: FSMContext):
     await state.update_data(passengers=message.text)
@@ -126,7 +124,6 @@ async def select_passengers(message: types.Message, state: FSMContext):
         parse_mode="Markdown"
     )
 
-# Narx kiritilganda
 @dp.message(BookingState.waiting_for_price)
 async def enter_price(message: types.Message, state: FSMContext):
     if message.text == "🔙 Orqaga":
@@ -151,7 +148,6 @@ async def enter_price(message: types.Message, state: FSMContext):
         reply_markup=builder.as_markup(resize_keyboard=True)
     )
 
-# Kontakt va buyurtmani yakunlash
 @dp.message(BookingState.waiting_for_contact)
 async def get_contact(message: types.Message, state: FSMContext):
     if message.text == "🔙 Orqaga":
