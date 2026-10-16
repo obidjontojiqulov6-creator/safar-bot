@@ -20,7 +20,6 @@ class BookingState(StatesGroup):
     waiting_for_price = State()
     waiting_for_contact = State()
 
-# O'zbekistonning barcha viloyat markazlari va asosiy shaharlari
 CITIES = [
     "Toshkent", "Andijon", "Buxoro", "Jizzax", 
     "Navoiy", "Namangan", "Qarshi", "Samarqand", 
@@ -52,7 +51,7 @@ async def select_language(message: types.Message, state: FSMContext):
     builder = ReplyKeyboardBuilder()
     for city in CITIES:
         builder.button(text=city)
-    builder.button(text="🔙 Orqaga")
+    builder.button(text="🔙 Orqaga" if lang == "uz" else "🔙 Назад")
     builder.adjust(2, 2, 2, 2, 2, 2, 1)
 
     text = "📍 Qayerdan jo'naysiz? Hududni tanlang:" if lang == "uz" else "📍 Откуда выезжаете? Выберите регион:"
@@ -60,23 +59,24 @@ async def select_language(message: types.Message, state: FSMContext):
 
 @dp.message(BookingState.waiting_for_from_city)
 async def select_from_city(message: types.Message, state: FSMContext):
-    if message.text == "🔙 Orqaga":
+    data = await state.get_data()
+    lang = data.get("lang", "uz")
+
+    if message.text in ["🔙 Orqaga", "🔙 Назад"]:
         return await cmd_start(message, state)
     
     if message.text not in CITIES:
-        return await message.answer("Iltimos, tugmalardagi hududlardan birini tanlang yoki 'Orqaga'ni bosing.")
+        err = "Iltimos, tugmalardagi hududlardan birini tanlang." if lang == "uz" else "Пожалуйста, выберите регион с помощью кнопок."
+        return await message.answer(err)
 
     await state.update_data(from_city=message.text)
     await state.set_state(BookingState.waiting_for_to_city)
-
-    data = await state.get_data()
-    lang = data.get("lang", "uz")
 
     builder = ReplyKeyboardBuilder()
     for city in CITIES:
         if city != message.text:
             builder.button(text=city)
-    builder.button(text="🔙 Orqaga")
+    builder.button(text="🔙 Orqaga" if lang == "uz" else "🔙 Назад")
     builder.adjust(2, 2, 2, 2, 2, 2, 1)
 
     text = f"🏁 Qayerga borasiz? (Jo'nash: {message.text})" if lang == "uz" else f"🏁 Куда едем? (Откуда: {message.text})"
@@ -84,17 +84,22 @@ async def select_from_city(message: types.Message, state: FSMContext):
 
 @dp.message(BookingState.waiting_for_to_city)
 async def select_to_city(message: types.Message, state: FSMContext):
-    if message.text == "🔙 Orqaga":
+    data = await state.get_data()
+    lang = data.get("lang", "uz")
+
+    if message.text in ["🔙 Orqaga", "🔙 Назад"]:
         await state.set_state(BookingState.waiting_for_from_city)
         builder = ReplyKeyboardBuilder()
         for city in CITIES:
             builder.button(text=city)
-        builder.button(text="🔙 Orqaga")
+        builder.button(text="🔙 Orqaga" if lang == "uz" else "🔙 Назад")
         builder.adjust(2, 2, 2, 2, 2, 2, 1)
-        return await message.answer("📍 Qayerdan jo'naysiz? Hududni tanlang:", reply_markup=builder.as_markup(resize_keyboard=True))
+        text = "📍 Qayerdan jo'naysiz? Hududni tanlang:" if lang == "uz" else "📍 Откуда выезжаете? Выберите регион:"
+        return await message.answer(text, reply_markup=builder.as_markup(resize_keyboard=True))
 
     if message.text not in CITIES:
-        return await message.answer("Iltimos, ro'yxatdagi hududlardan birini tanlang.")
+        err = "Iltimos, ro'yxatdagi hududlardan birini tanlang." if lang == "uz" else "Пожалуйста, выберите регион из списка."
+        return await message.answer(err)
 
     await state.update_data(to_city=message.text)
     await state.set_state(BookingState.waiting_for_passengers)
@@ -104,75 +109,100 @@ async def select_to_city(message: types.Message, state: FSMContext):
     builder.button(text="2")
     builder.button(text="3")
     builder.button(text="4")
-    builder.button(text="🔙 Orqaga")
+    builder.button(text="🔙 Orqaga" if lang == "uz" else "🔙 Назад")
     builder.adjust(2, 2, 1)
 
-    await message.answer("👥 Necha kishilik joy kerak? (Odam sonini tanlang):", reply_markup=builder.as_markup(resize_keyboard=True))
+    text = "👥 Necha kishilik joy kerak? (Odam sonini tanlang):" if lang == "uz" else "👥 Сколько мест нужно? (Выберите количество пассажиров):"
+    await message.answer(text, reply_markup=builder.as_markup(resize_keyboard=True))
 
 @dp.message(BookingState.waiting_for_passengers, F.text.in_(["1", "2", "3", "4"]))
 async def select_passengers(message: types.Message, state: FSMContext):
     await state.update_data(passengers=message.text)
     await state.set_state(BookingState.waiting_for_price)
 
+    data = await state.get_data()
+    lang = data.get("lang", "uz")
+
     builder = ReplyKeyboardBuilder()
-    builder.button(text="🔙 Orqaga")
+    builder.button(text="🔙 Orqaga" if lang == "uz" else "🔙 Назад")
     builder.adjust(1)
 
-    await message.answer(
-        "💵 Yo'lkira uchun bermoqchi bo'lgan summangizni kiriting (masalan: `50000` yoki `80000` so'm deb raqamda yozing):",
-        reply_markup=builder.as_markup(resize_keyboard=True),
-        parse_mode="Markdown"
+    text = (
+        "💵 Yo'lkira uchun bermoqchi bo'lgan summangizni kiriting (masalan: `50000` yoki `80000` so'm):"
+        if lang == "uz" else
+        "💵 Введите сумму, которую готовы предложить за поездку (например: `50000` или `80000` сум):"
     )
+    await message.answer(text, reply_markup=builder.as_markup(resize_keyboard=True), parse_mode="Markdown")
 
 @dp.message(BookingState.waiting_for_price)
 async def enter_price(message: types.Message, state: FSMContext):
-    if message.text == "🔙 Orqaga":
+    data = await state.get_data()
+    lang = data.get("lang", "uz")
+
+    if message.text in ["🔙 Orqaga", "🔙 Назад"]:
         await state.set_state(BookingState.waiting_for_passengers)
         builder = ReplyKeyboardBuilder()
         for i in ["1", "2", "3", "4"]:
             builder.button(text=i)
-        builder.button(text="🔙 Orqaga")
+        builder.button(text="🔙 Orqaga" if lang == "uz" else "🔙 Назад")
         builder.adjust(2, 2, 1)
-        return await message.answer("👥 Necha kishilik joy kerak?", reply_markup=builder.as_markup(resize_keyboard=True))
+        text = "👥 Necha kishilik joy kerak?" if lang == "uz" else "👥 Сколько мест нужно?"
+        return await message.answer(text, reply_markup=builder.as_markup(resize_keyboard=True))
 
     await state.update_data(price=message.text)
     await state.set_state(BookingState.waiting_for_contact)
 
     builder = ReplyKeyboardBuilder()
-    builder.button(text="📱 Kontaktni yuborish", request_contact=True)
-    builder.button(text="🔙 Orqaga")
+    builder.button(text="📱 Kontaktni yuborish" if lang == "uz" else "📱 Отправить контакт", request_contact=True)
+    builder.button(text="🔙 Orqaga" if lang == "uz" else "🔙 Назад")
     builder.adjust(1, 1)
 
-    await message.answer(
-        "📞 Aloqa uchun telefon raqamingizni yuboring (tugmani bosing yoki raqamni yozing):",
-        reply_markup=builder.as_markup(resize_keyboard=True)
+    text = (
+        "📞 Aloqa uchun telefon raqamingizni yuboring (tugmani bosing yoki raqamni yozing):"
+        if lang == "uz" else
+        "📞 Отправьте номер телефона для связи (нажмите кнопку или напишите номер):"
     )
+    await message.answer(text, reply_markup=builder.as_markup(resize_keyboard=True))
 
 @dp.message(BookingState.waiting_for_contact)
 async def get_contact(message: types.Message, state: FSMContext):
-    if message.text == "🔙 Orqaga":
+    data = await state.get_data()
+    lang = data.get("lang", "uz")
+
+    if message.text in ["🔙 Orqaga", "🔙 Назад"]:
         await state.set_state(BookingState.waiting_for_price)
         builder = ReplyKeyboardBuilder()
-        builder.button(text="🔙 Orqaga")
-        return await message.answer("💵 Summani qaytadan kiriting:", reply_markup=builder.as_markup(resize_keyboard=True))
+        builder.button(text="🔙 Orqaga" if lang == "uz" else "🔙 Назад")
+        text = "💵 Summani qaytadan kiriting:" if lang == "uz" else "💵 Введите сумму заново:"
+        return await message.answer(text, reply_markup=builder.as_markup(resize_keyboard=True))
 
     phone = message.contact.phone_number if message.contact else message.text
-    data = await state.get_data()
-    
     name = message.from_user.first_name
 
-    await message.answer(
-        f"Rahmat, {name}! Buyurtmangiz qabul qilindi ✅\n\n"
-        f"📋 **Buyurtma tafsilotlari:**\n"
-        f"📍 Qayerdan: {data.get('from_city')}\n"
-        f"🏁 Qayerga: {data.get('to_city')}\n"
-        f"👥 Odam soni: {data.get('passengers')} ta\n"
-        f"💵 Taklif qilingan narx: {data.get('price')}\n"
-        f"📞 Tel raqam: `{phone}`\n\n"
-        "Tez orada haydovchilarimiz siz bilan bog'lanishadi.",
-        reply_markup=types.ReplyKeyboardRemove(),
-        parse_mode="Markdown"
-    )
+    if lang == "uz":
+        response_text = (
+            f"Rahmat, {name}! Buyurtmangiz qabul qilindi ✅\n\n"
+            f"📋 **Buyurtma tafsilotlari:**\n"
+            f"📍 Qayerdan: {data.get('from_city')}\n"
+            f"🏁 Qayerga: {data.get('to_city')}\n"
+            f"👥 Odam soni: {data.get('passengers')} ta\n"
+            f"💵 Taklif qilingan narx: {data.get('price')}\n"
+            f"📞 Tel raqam: `{phone}`\n\n"
+            "Tez orada haydovchilarimiz siz bilan bog'lanishadi."
+        )
+    else:
+        response_text = (
+            f"Спасибо, {name}! Ваш заказ принят ✅\n\n"
+            f"📋 **Детали заказа:**\n"
+            f"📍 Откуда: {data.get('from_city')}\n"
+            f"🏁 Куда: {data.get('to_city')}\n"
+            f"👥 Количество пассажиров: {data.get('passengers')}\n"
+            f"💵 Предложенная цена: {data.get('price')}\n"
+            f"📞 Телефон: `{phone}`\n\n"
+            "Скоро наши водители свяжутся с вами."
+        )
+
+    await message.answer(response_text, reply_markup=types.ReplyKeyboardRemove(), parse_mode="Markdown")
     await state.clear()
 
 @dp.message()
