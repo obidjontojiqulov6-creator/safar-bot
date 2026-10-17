@@ -91,7 +91,8 @@ async def select_to_city(message: types.Message, state: FSMContext):
         await state.set_state(BookingState.waiting_for_from_city)
         builder = ReplyKeyboardBuilder()
         for city in CITIES:
-            builder.button(text=city)
+            if city != data.get("from_city"):
+                builder.button(text=city)
         builder.button(text="🔙 Orqaga" if lang == "uz" else "🔙 Назад")
         builder.adjust(2, 2, 2, 2, 2, 2, 1)
         text = "📍 Qayerdan jo'naysiz? Hududni tanlang:" if lang == "uz" else "📍 Откуда выезжаете? Выберите регион:"
@@ -193,24 +194,18 @@ async def enter_price(message: types.Message, state: FSMContext):
     builder.adjust(1, 1)
 
     text = (
-        "📞 Aloqa uchun telefon raqamingizni yuboring (tugmani bosing yoki raqamni yozing):"
+        "📞 Iltimos, aloqa uchun pastdagi **'📱 Kontaktni yuborish'** tugmasini bosing:"
         if lang == "uz" else
-        "📞 Отправьте номер телефона для связи (нажмите кнопку или напишите номер):"
+        "📞 Пожалуйста, нажмите кнопку **'📱 Отправить контакт'** ниже:"
     )
-    await message.answer(text, reply_markup=builder.as_markup(resize_keyboard=True))
+    await message.answer(text, reply_markup=builder.as_markup(resize_keyboard=True), parse_mode="Markdown")
 
-@dp.message(BookingState.waiting_for_contact)
+@dp.message(BookingState.waiting_for_contact, F.contact)
 async def get_contact(message: types.Message, state: FSMContext):
     data = await state.get_data()
     lang = data.get("lang", "uz")
 
-    if message.text in ["🔙 Orqaga", "🔙 Назад"]:
-        await state.set_state(BookingState.waiting_for_price)
-        builder = ReplyKeyboardBuilder()
-        builder.button(text="🔙 Orqaga" if lang == "uz" else "🔙 Назад")
-        return await message.answer("💵 Summani qaytadan kiriting:", reply_markup=builder.as_markup(resize_keyboard=True))
-
-    phone = message.contact.phone_number if message.contact else message.text
+    phone = message.contact.phone_number
     name = message.from_user.first_name
     pass_summary = " ".join(data.get('passengers', []))
 
@@ -222,9 +217,10 @@ async def get_contact(message: types.Message, state: FSMContext):
             f"🏁 Qayerga: {data.get('to_city')}\n"
             f"👥 Odamlar: {pass_summary}\n"
             f"💵 Taklif qilingan narx: {data.get('price')}\n"
-            f"📞 Tel raqam: `{phone}`\n\n"
+            f"📞 Tel raqam: `+{phone}`\n\n"
             "Tez orada haydovchilarimiz siz bilan bog'lanishadi."
         )
+        cancel_btn_text = "❌ Buyurtmani bekor qilish / Qaytadan"
     else:
         response_text = (
             f"Спасибо, {name}! Ваш заказ принят ✅\n\n"
@@ -233,12 +229,55 @@ async def get_contact(message: types.Message, state: FSMContext):
             f"🏁 Куда: {data.get('to_city')}\n"
             f"👥 Пассажиры: {pass_summary}\n"
             f"💵 Предложенная цена: {data.get('price')}\n"
-            f"📞 Телефон: `{phone}`\n\n"
+            f"📞 Телефон: `+{phone}`\n\n"
             "Скоро наши водители свяжутся с вами."
         )
+        cancel_btn_text = "❌ Отменить заказ / Заново"
 
-    await message.answer(response_text, reply_markup=types.ReplyKeyboardRemove(), parse_mode="Markdown")
+    inline_builder = InlineKeyboardBuilder()
+    inline_builder.button(text=cancel_btn_text, callback_data="cancel_order")
+
+    await message.answer(response_text, reply_markup=inline_builder.as_markup(), parse_mode="Markdown")
     await state.clear()
+
+@dp.callback_query(F.data == "cancel_order")
+async def cancel_order_callback(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer("Buyurtma bekor qilindi!")
+    
+    # Tilni saqlab qolgan holda shaharni tanlash qismiga qaytaramiz
+    await state.set_state(BookingState.waiting_for_from_city)
+    
+    # Agar til ma'lumoti saqlanmagan bo'lsa default o'zbekcha olamiz
+    lang = "uz"
+
+    builder = ReplyKeyboardBuilder()
+    for city in CITIES:
+        builder.button(text=city)
+    builder.button(text="🔙 Orqaga" if lang == "uz" else "🔙 Назад")
+    builder.adjust(2, 2, 2, 2, 2, 2, 1)
+
+    text = "❌ Buyurtma bekor qilindi.\n\n📍 Qayerdan jo'naysiz? Hududni tanlang:" if lang == "uz" else "❌ Заказ отменен.\n\n📍 Откуда выезжаете? Выберите регион:"
+    
+    await callback.message.edit_text("❌ Buyurtma bekor qilindi.")
+    await callback.message.answer(text, reply_markup=builder.as_markup(resize_keyboard=True))
+
+@dp.message(BookingState.waiting_for_contact)
+async def wrong_contact(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    lang = data.get("lang", "uz")
+
+    if message.text in ["🔙 Orqaga", "🔙 Назад"]:
+        await state.set_state(BookingState.waiting_for_price)
+        builder = ReplyKeyboardBuilder()
+        builder.button(text="🔙 Orqaga" if lang == "uz" else "🔙 Назад")
+        return await message.answer("💵 Summani qaytadan kiriting:", reply_markup=builder.as_markup(resize_keyboard=True))
+
+    err = (
+        "⚠️ Iltimos, qo'lda raqam yozmang, faqat pastdagi '📱 Kontaktni yuborish' tugmasini bosing!"
+        if lang == "uz" else
+        "⚠️ Пожалуйста, не пишите номер вручную, нажмите кнопку '📱 Отправить контакт' ниже!"
+    )
+    await message.answer(err)
 
 @dp.message()
 async def echo_text(message: types.Message, state: FSMContext):
@@ -261,5 +300,5 @@ async def main():
     print("Bot ishga tushdi...")
     await asyncio.gather(web_server(), dp.start_polling(bot))
 
-if __name__ == "__main__":
+If __name__ == "__main__":
     asyncio.run(main())
