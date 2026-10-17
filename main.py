@@ -118,3 +118,148 @@ async def show_passenger_menu(message: types.Message, passengers: list, lang: st
     pass_str = " ".join(passengers) if passengers else ("(Hali tanlanmadi)" if lang == "uz" else "(Еще не выбрано)")
     text = (
         f"👥 Yo'lovchilar tarkibini tanlang (Maksimal 4 ta):\nJoriy: {pass_str}"
+        if lang == "uz" else
+        f"👥 Выберите состав пассажиров (Максимум 4):\nТекущие: {pass_str}"
+    )
+    await message.answer(text, reply_markup=builder.as_markup(resize_keyboard=True))
+
+@dp.message(BookingState.waiting_for_passengers)
+async def handle_passengers(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    lang = data.get("lang", "uz")
+    passengers = data.get("passengers", [])
+
+    text = message.text
+
+    if text in ["🔙 Orqaga", "🔙 Назад"]:
+        await state.set_state(BookingState.waiting_for_to_city)
+        builder = ReplyKeyboardBuilder()
+        for city in CITIES:
+            if city != data.get("from_city"):
+                builder.button(text=city)
+        builder.button(text="🔙 Orqaga" if lang == "uz" else "🔙 Назад")
+        builder.adjust(2, 2, 2, 2, 2, 2, 1)
+        return await message.answer("🏁 Qayerga borasiz?", reply_markup=builder.as_markup(resize_keyboard=True))
+
+    if text in ["🔄 Tozalash", "🔄 Очистить"]:
+        passengers = []
+        await state.update_data(passengers=passengers)
+        return await show_passenger_menu(message, passengers, lang)
+
+    if text in ["➡️ Keyingi bo'lim", "➡️ Следующий раздел"]:
+        if not passengers:
+            err = "Iltimos, kamida 1 ta yo'lovchini tanlang!" if lang == "uz" else "Пожалуйста, выберите хотя бы 1 пассажира!"
+            return await message.answer(err)
+        
+        await state.set_state(BookingState.waiting_for_price)
+        builder = ReplyKeyboardBuilder()
+        builder.button(text="🔙 Orqaga" if lang == "uz" else "🔙 Назад")
+        builder.adjust(1)
+        
+        price_text = (
+            "💵 Yo'lkira uchun bermoqchi bo'lgan summangizni kiriting (masalan: `50000` so'm):"
+            if lang == "uz" else
+            "💵 Введите сумму, которую готовы предложить за поездку (например: `50000` сум):"
+        )
+        return await message.answer(price_text, reply_markup=builder.as_markup(resize_keyboard=True), parse_mode="Markdown")
+
+    if text in ["👨 Erkak", "👨 Мужчина", "👩 Ayol", "👩 Женщина"]:
+        if len(passengers) >= 4:
+            warn = "Maksimal 4 ta yo'lovchi tanlash mumkin!" if lang == "uz" else "Максимум можно выбрать 4 пассажиров!"
+            return await message.answer(warn)
+        
+        emoji = "👨" if "Erkak" in text or "Мужчина" in text else "👩"
+        passengers.append(emoji)
+        await state.update_data(passengers=passengers)
+        return await show_passenger_menu(message, passengers, lang)
+    
+    await message.answer("Iltimos, pastdagi tugmalardan foydalaning.")
+
+@dp.message(BookingState.waiting_for_price)
+async def enter_price(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    lang = data.get("lang", "uz")
+
+    if message.text in ["🔙 Orqaga", "🔙 Назад"]:
+        await state.set_state(BookingState.waiting_for_passengers)
+        return await show_passenger_menu(message, data.get("passengers", []), lang)
+
+    await state.update_data(price=message.text)
+    await state.set_state(BookingState.waiting_for_contact)
+
+    builder = ReplyKeyboardBuilder()
+    builder.button(text="📱 Kontaktni yuborish" if lang == "uz" else "📱 Отправить контакт", request_contact=True)
+    builder.button(text="🔙 Orqaga" if lang == "uz" else "🔙 Назад")
+    builder.adjust(1, 1)
+
+    text = (
+        "📞 Aloqa uchun telefon raqamingizni yuboring (tugmani bosing yoki raqamni yozing):"
+        if lang == "uz" else
+        "📞 Отправьте номер телефона для связи (нажмите кнопку или напишите номер):"
+    )
+    await message.answer(text, reply_markup=builder.as_markup(resize_keyboard=True))
+
+@dp.message(BookingState.waiting_for_contact)
+async def get_contact(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    lang = data.get("lang", "uz")
+
+    if message.text in ["🔙 Orqaga", "🔙 Назад"]:
+        await state.set_state(BookingState.waiting_for_price)
+        builder = ReplyKeyboardBuilder()
+        builder.button(text="🔙 Orqaga" if lang == "uz" else "🔙 Назад")
+        return await message.answer("💵 Summani qaytadan kiriting:", reply_markup=builder.as_markup(resize_keyboard=True))
+
+    phone = message.contact.phone_number if message.contact else message.text
+    name = message.from_user.first_name
+    pass_summary = " ".join(data.get('passengers', []))
+
+    if lang == "uz":
+        response_text = (
+            f"Rahmat, {name}! Buyurtmangiz qabul qilindi ✅\n\n"
+            f"📋 **Buyurtma tafsilotlari:**\n"
+            f"📍 Qayerdan: {data.get('from_city')}\n"
+            f"🏁 Qayerga: {data.get('to_city')}\n"
+            f"👥 Odamlar: {pass_summary}\n"
+            f"💵 Taklif qilingan narx: {data.get('price')}\n"
+            f"📞 Tel raqam: `{phone}`\n\n"
+            "Tez orada haydovchilarimiz siz bilan bog'lanishadi."
+        )
+    else:
+        response_text = (
+            f"Спасибо, {name}! Ваш заказ принят ✅\n\n"
+            f"📋 **Детали заказа:**\n"
+            f"📍 Откуда: {data.get('from_city')}\n"
+            f"🏁 Куда: {data.get('to_city')}\n"
+            f"👥 Пассажиры: {pass_summary}\n"
+            f"💵 Предложенная цена: {data.get('price')}\n"
+            f"📞 Телефон: `{phone}`\n\n"
+            "Скоро наши водители свяжутся с вами."
+        )
+
+    await message.answer(response_text, reply_markup=types.ReplyKeyboardRemove(), parse_mode="Markdown")
+    await state.clear()
+
+@dp.message()
+async def echo_text(message: types.Message, state: FSMContext):
+    await cmd_start(message, state)
+
+async def handle(request):
+    return web.Response(text="Bot ishlayapti!")
+
+async def web_server():
+    app = web.Application()
+    app.add_routes([web.get("/", handle)])
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.environ.get("PORT", 10000))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+
+async def main():
+    logging.basicConfig(level=logging.INFO)
+    print("Bot ishga tushdi...")
+    await asyncio.gather(web_server(), dp.start_polling(bot))
+
+if __name__ == "__main__":
+    asyncio.run(main())
