@@ -243,11 +243,7 @@ async def get_contact(message: types.Message, state: FSMContext):
 @dp.callback_query(F.data == "cancel_order")
 async def cancel_order_callback(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer("Buyurtma bekor qilindi!")
-    
-    # Tilni saqlab qolgan holda shaharni tanlash qismiga qaytaramiz
     await state.set_state(BookingState.waiting_for_from_city)
-    
-    # Agar til ma'lumoti saqlanmagan bo'lsa default o'zbekcha olamiz
     lang = "uz"
 
     builder = ReplyKeyboardBuilder()
@@ -300,5 +296,5 @@ async def main():
     print("Bot ishga tushdi...")
     await asyncio.gather(web_server(), dp.start_polling(bot))
 
-If __name__ == "__main__":
+if __name__ == "__main__":
     asyncio.run(main())
