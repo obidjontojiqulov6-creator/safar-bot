@@ -1,6 +1,7 @@
 import os
 import asyncio
 import logging
+import aiohttp
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -280,7 +281,22 @@ async def echo_text(message: types.Message, state: FSMContext):
     await cmd_start(message, state)
 
 async def handle(request):
-    return web.Response(text="Bot ishlayapti!")
+    return web.Response(text="Bot uyg'oq va ishlayapti!")
+
+# Server o'zini-o'zi har 7 daqiqada uyg'otib turishi uchun funksiya
+async def self_ping():
+    await asyncio.sleep(10) # Bot to'liq ishga tushishi uchun biroz kutamiz
+    render_url = os.getenv("RENDER_EXTERNAL_URL")
+    if not render_url:
+        return
+    while True:
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(render_url) as response:
+                    pass
+        except Exception:
+            pass
+        await asyncio.sleep(420) # Har 7 daqiqada (420 sekund) so'rov yuborish
 
 async def web_server():
     app = web.Application()
@@ -290,10 +306,13 @@ async def web_server():
     port = int(os.environ.get("PORT", 10000))
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
+    
+    # Self-ping ni fon rejimida ishga tushiramiz
+    asyncio.create_task(self_ping())
 
 async def main():
     logging.basicConfig(level=logging.INFO)
-    print("Bot ishga tushdi...")
+    print("Bot ishga tushdi va doimiy uyg'oq turishga sozlansin...")
     await asyncio.gather(web_server(), dp.start_polling(bot))
 
 if __name__ == "__main__":
