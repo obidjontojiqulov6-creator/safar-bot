@@ -1,6 +1,7 @@
 import os
 import asyncio
 import logging
+import math
 import aiohttp
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
@@ -13,6 +14,10 @@ TOKEN = os.getenv("BOT_TOKEN")
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
+# Vaqtinchalik xotira (Keyinchalik bazaga o'tkazamiz)
+ORDERS = {}    # Faol buyurtmalar: {order_id: {user_id, from_city, to_city, passengers, price, phone, lat, lon}}
+DRIVERS = {}   # Haydovchilar: {driver_id: {name, car, lat, lon, balance}}
+
 class BookingState(StatesGroup):
     waiting_for_lang = State()
     waiting_for_from_city = State()
@@ -20,6 +25,10 @@ class BookingState(StatesGroup):
     waiting_for_passengers = State()
     waiting_for_price = State()
     waiting_for_contact = State()
+
+class DriverState(StatesGroup):
+    waiting_for_car = State()
+    waiting_for_location = State()
 
 CITIES = [
     "Toshkent", "Andijon", "Buxoro", "Jizzax", 
@@ -35,14 +44,135 @@ async def cmd_start(message: types.Message, state: FSMContext):
     builder = ReplyKeyboardBuilder()
     builder.button(text="🇺🇿 O'zbekcha")
     builder.button(text="🇷🇺 Русский")
-    builder.adjust(2)
+    builder.button(text="🚖 Haydovchi bo'lish")
+    builder.adjust(2, 1)
     
     await message.answer(
         "Assalomu alaykum! Safar taksi xizmatiga xush kelibsiz.\n"
-        "Tilni tanlang / Пожалуйста, выберите язык:",
+        "Tilni tanlang yoki haydovchi sifatida kiring:",
         reply_markup=builder.as_markup(resize_keyboard=True)
     )
 
+@dp.message(F.text == "🚖 Haydovchi bo'lish")
+async def driver_mode(message: types.Message, state: FSMContext):
+    await state.clear()
+    await state.set_state(DriverState.waiting_for_car)
+    await message.answer(
+        "🚖 Haydovchilar bo'limiga xush kelibsiz!\n"
+        "Mashinangiz rusumi va raqamini kiriting (masalan: `Cobalt 01 A 777 AA`):",
+        reply_markup=types.ReplyKeyboardRemove(),
+        parse_mode="Markdown"
+    )
+
+@dp.message(DriverState.waiting_for_car)
+async def get_driver_car(message: types.Message, state: FSMContext):
+    await state.update_data(car=message.text)
+    await state.set_state(DriverState.waiting_for_location)
+
+    builder = ReplyKeyboardBuilder()
+    builder.button(text="📍 Lokatsiyani yuborish", request_location=True)
+    builder.adjust(1)
+
+    await message.answer(
+        "Rahmat! Endi haydovchilar bazasiga qo'shilish uchun turgan joyingizni (lokatsiyangizni) yuboring:",
+        reply_markup=builder.as_markup(resize_keyboard=True)
+    )
+
+@dp.message(DriverState.waiting_for_location, F.location)
+async def get_driver_location(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    driver_id = message.from_user.id
+    
+    DRIVERS[driver_id] = {
+        "name": message.from_user.first_name,
+        "car": data.get("car"),
+        "lat": message.location.latitude,
+        "lon": message.location.longitude,
+        "balance": 10000  # Boshlang'ich bonus balans
+    }
+
+    builder = ReplyKeyboardBuilder()
+    builder.button(text="📋 Yangi buyurtmalar")
+    builder.button(text="💰 Balansni tekshirish")
+    builder.adjust(2)
+
+    await message.answer(
+        "✅ Siz muvaffaqiyatli haydovchilar safiga qo'shildingiz!\n"
+        "Yaqin atrofdagi buyurtmalarni ko'rish uchun pastdagi tugmani bosing:",
+        reply_markup=builder.as_markup(resize_keyboard=True)
+    )
+    await state.clear()
+
+@dp.message(F.text == "📋 Yangi buyurtmalar")
+async def show_available_orders(message: types.Message):
+    driver_id = message.from_user.id
+    if driver_id not in DRIVERS:
+        return await message.answer("Iltimos, avval /start tugmasini bosib haydovchi sifatida ro'yxatdan o'ting.")
+
+    if not ORDERS:
+        return await message.answer("Hozircha faol buyurtmalar mavjud emas. Birozdan so'ng yana tekshiring.")
+
+    driver = DRIVERS[driver_id]
+    
+    for order_id, order in ORDERS.items():
+        # Masofani hisoblash (taxminiy km)
+        distance = math.sqrt((driver['lat'] - order['lat'])**2 + (driver['lon'] - order['lon'])**2) * 111
+        
+        # Rangli indikatorlar (10km gacha yashil, undan uzoq qizil)
+        indicator = "🟢 Yaqin" if distance <= 10 else "🔴 Uzoqroq"
+        
+        text = (
+            f"🚖 **Buyurtma #{order_id}**\n"
+            f"📍 Qayerdan: {order['from_city']}\n"
+            f"🏁 Qayerga: {order['to_city']}\n"
+            f"👥 Yo'lovchilar: {order['passengers']}\n"
+            f"💵 Narx: {order['price']}\n"
+            f"📏 Masofa: ~{round(distance, 1)} km ({indicator})"
+        )
+        
+        inline_builder = InlineKeyboardBuilder()
+        inline_builder.button(text="📞 Kontaktni ochish (Komissiya: 2000 so'm)", callback_data=f"open_contact_{order_id}")
+        
+        await message.answer(text, reply_markup=inline_builder.as_markup(), parse_mode="Markdown")
+
+@dp.callback_query(F.data.startswith("open_contact_"))
+async def open_contact_callback(callback: types.CallbackQuery):
+    driver_id = callback.from_user.id
+    order_id = callback.data.split("_")[2]
+
+    if driver_id not in DRIVERS:
+        return await callback.answer("Siz haydovchi sifatida ro'yxatdan o'tmagansiz!", show_alert=True)
+
+    if order_id not in ORDERS:
+        return await callback.answer("Bu buyurtma allaqachon yopilgan yoki mavjud emas!", show_alert=True)
+
+    driver = DRIVERS[driver_id]
+    if driver["balance"] < 2000:
+        return await callback.answer("Balansingiz yetarli emas! Iltimos, balansni to'ldiring.", show_alert=True)
+
+    # Balansdan komissiya yechish
+    driver["balance"] -= 2000
+    order = ORDERS[order_id]
+
+    contact_text = (
+        f"✅ Buyurtma muvaffaqiyatli ochildi!\n"
+        f"👤 Yo'lovchi: {order['name']}\n"
+        f"📞 Telefon: `+{order['phone']}`\n"
+        f"💰 Qolgan balansingiz: {driver['balance']} so'm"
+    )
+    await callback.message.answer(contact_text, parse_mode="Markdown")
+    await callback.answer()
+
+@dp.message(F.text == "💰 Balansni tekshirish")
+async def check_balance(message: types.Message):
+    driver_id = message.from_user.id
+    if driver_id not in DRIVERS:
+        return await message.answer("Siz ro'yxatdan o'tmagansiz.")
+    
+    balance = DRIVERS[driver_id]["balance"]
+    await message.answer(f"💳 Sizning balansingiz: **{balance} so'm**", parse_mode="Markdown")
+
+# Yo'lovchi qismi (Oldingi mantiq)
 @dp.message(BookingState.waiting_for_lang, F.text.in_(["🇺🇿 O'zbekcha", "🇷🇺 Русский"]))
 async def select_language(message: types.Message, state: FSMContext):
     lang = "uz" if "O'zbekcha" in message.text else "ru"
@@ -210,6 +340,20 @@ async def get_contact(message: types.Message, state: FSMContext):
     name = message.from_user.first_name
     pass_summary = " ".join(data.get('passengers', []))
 
+    # Buyurtmani umumiy bazaga saqlaymiz (Toshkent koordinatasini vaqtincha default olamiz)
+    order_id = str(len(ORDERS) + 1)
+    ORDERS[order_id] = {
+        "user_id": message.from_user.id,
+        "name": name,
+        "from_city": data.get('from_city'),
+        "to_city": data.get('to_city'),
+        "passengers": pass_summary,
+        "price": data.get('price'),
+        "phone": phone,
+        "lat": 41.2995,  # Keyinchalik haqiqiy lokatsiya olinadi
+        "lon": 69.2401
+    }
+
     if lang == "uz":
         response_text = (
             f"Rahmat, {name}! Buyurtmangiz qabul qilindi ✅\n\n"
@@ -236,13 +380,17 @@ async def get_contact(message: types.Message, state: FSMContext):
         cancel_btn_text = "❌ Отменить заказ / Заново"
 
     inline_builder = InlineKeyboardBuilder()
-    inline_builder.button(text=cancel_btn_text, callback_data="cancel_order")
+    inline_builder.button(text=cancel_btn_text, callback_data=f"cancel_order_{order_id}")
 
     await message.answer(response_text, reply_markup=inline_builder.as_markup(), parse_mode="Markdown")
     await state.clear()
 
-@dp.callback_query(F.data == "cancel_order")
+@dp.callback_query(F.data.startswith("cancel_order_"))
 async def cancel_order_callback(callback: types.CallbackQuery, state: FSMContext):
+    order_id = callback.data.split("_")[2]
+    if order_id in ORDERS:
+        del ORDERS[order_id]
+
     await callback.answer("Buyurtma bekor qilindi!")
     await state.set_state(BookingState.waiting_for_from_city)
     lang = "uz"
@@ -283,9 +431,8 @@ async def echo_text(message: types.Message, state: FSMContext):
 async def handle(request):
     return web.Response(text="Bot uyg'oq va ishlayapti!")
 
-# Server o'zini-o'zi har 7 daqiqada uyg'otib turishi uchun funksiya
 async def self_ping():
-    await asyncio.sleep(10) # Bot to'liq ishga tushishi uchun biroz kutamiz
+    await asyncio.sleep(10)
     render_url = os.getenv("RENDER_EXTERNAL_URL")
     if not render_url:
         return
@@ -296,7 +443,7 @@ async def self_ping():
                     pass
         except Exception:
             pass
-        await asyncio.sleep(420) # Har 7 daqiqada (420 sekund) so'rov yuborish
+        await asyncio.sleep(420)
 
 async def web_server():
     app = web.Application()
@@ -307,13 +454,12 @@ async def web_server():
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
     
-    # Self-ping ni fon rejimida ishga tushiramiz
     asyncio.create_task(self_ping())
 
 async def main():
     logging.basicConfig(level=logging.INFO)
-    print("Bot ishga tushdi va doimiy uyg'oq turishga sozlansin...")
+    print("Bot haydovchilar rejimi bilan ishga tushdi...")
     await asyncio.gather(web_server(), dp.start_polling(bot))
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.main() if hasattr(asyncio, "main") else asyncio.run(main())
