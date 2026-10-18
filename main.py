@@ -3,6 +3,7 @@ import asyncio
 import logging
 import math
 import aiohttp
+from datetime import datetime
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -14,8 +15,15 @@ TOKEN = os.getenv("BOT_TOKEN")
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-ORDERS = {}    # Faol buyurtmalar
-DRIVERS = {}   # Haydovchilar
+# Bazalar va statistika
+ORDERS = {}       # Faol buyurtmalar: {order_id: {...}}
+DRIVERS = {}      # Haydovchilar: {driver_id: {...}}
+ALL_USERS = set() # Jami a'zo bo'lgan foydalanuvchilar ID lari
+DAILY_VISITS = set() # Bugun kirgan foydalanuvchilar (kunlik statistika uchun)
+LAST_VISIT_DATE = datetime.now().date()
+
+# O'zingizning Telegram ID raqamingizni shu yerga yozing (Admin bo'lish uchun)
+ADMIN_ID = 123456789  # <--- O'zingizning ID raqamingizni yozib qo'ying
 
 class BookingState(StatesGroup):
     waiting_for_lang = State()
@@ -37,6 +45,17 @@ CITIES = [
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    ALL_USERS.add(user_id)
+    
+    # Kunlik statistika uchun sanani tekshiramiz
+    global DAILY_VISITS, LAST_VISIT_DATE
+    current_date = datetime.now().date()
+    if current_date != LAST_VISIT_DATE:
+        DAILY_VISITS.clear()
+        LAST_VISIT_DATE = current_date
+    DAILY_VISITS.add(user_id)
+
     await state.clear()
     await state.set_state(BookingState.waiting_for_lang)
     
@@ -44,13 +63,52 @@ async def cmd_start(message: types.Message, state: FSMContext):
     builder.button(text="🇺🇿 O'zbekcha")
     builder.button(text="🇷🇺 Русский")
     builder.button(text="🚖 Haydovchi kabineti")
-    builder.adjust(2, 1)
+    
+    if user_id == ADMIN_ID:
+        builder.button(text="👑 Admin paneli")
+        builder.adjust(2, 1, 1)
+    else:
+        builder.adjust(2, 1)
     
     await message.answer(
         "Assalomu alaykum! Safar taksi xizmatiga xush kelibsiz.\n"
         "Tilni tanlang yoki haydovchi sifatida kiring:",
         reply_markup=builder.as_markup(resize_keyboard=True)
     )
+
+@dp.message(F.text == "👑 Admin paneli")
+async def admin_panel(message: types.Message):
+    if message.from_user.id != ADMIN_ID:
+        return await message.answer("Sizda bu bo'limga kirish huquqi yo'q.")
+    
+    total_users = len(ALL_USERS)
+    today_active = len(DAILY_VISITS)
+    total_orders = len(ORDERS)
+    total_drivers = len(DRIVERS)
+
+    text = (
+        f"👑 **Rahbar / Admin paneli**\n\n"
+        f"👥 Jami a'zo bo'lgan foydalanuvchilar: **{total_users} ta**\n"
+        f"📅 Bugun botga kirganlar (tashrif): **{today_active} ta**\n"
+        f"📋 Hozirgi faol buyurtmalar: **{total_orders} ta**\n"
+        f"🚖 Ro'yxatdan o'tgan haydovchilar: **{total_drivers} ta**\n\n"
+        f"Server holati: 🌙 Uyqu rejimiga ruxsat berilgan (15 min faoliyatsizlikdan so'ng uxlaydi)"
+    )
+    
+    builder = ReplyKeyboardBuilder()
+    builder.button(text="🔄 Statistikani yangilash")
+    builder.button(text="🏠 Asosiy menyu")
+    builder.adjust(1, 1)
+    
+    await message.answer(text, reply_markup=builder.as_markup(resize_keyboard=True), parse_mode="Markdown")
+
+@dp.message(F.text == "🔄 Statistikani yangilash")
+async def refresh_stats(message: types.Message):
+    await admin_panel(message)
+
+@dp.message(F.text == "🏠 Asosiy menyu")
+async def back_to_main(message: types.Message, state: FSMContext):
+    await cmd_start(message, state)
 
 @dp.message(F.text == "🚖 Haydovchi kabineti")
 async def driver_cabinet(message: types.Message, state: FSMContext):
@@ -65,7 +123,6 @@ async def driver_cabinet(message: types.Message, state: FSMContext):
             parse_mode="Markdown"
         )
     
-    # Agar haydovchi allaqachon ro'yxatdan o'tgan bo'lsa, unga maxsus boshqaruv oynasini (kabinetini) chiqaramiz
     await show_driver_menu(message)
 
 async def show_driver_menu(message: types.Message):
@@ -111,7 +168,7 @@ async def get_driver_location(message: types.Message, state: FSMContext):
         "car": data.get("car"),
         "lat": message.location.latitude,
         "lon": message.location.longitude,
-        "balance": 10000  # Boshlang'ich bonus balans
+        "balance": 10000
     }
 
     await message.answer("✅ Ro'yxatdan o'tish yakunlandi!")
@@ -446,21 +503,7 @@ async def echo_text(message: types.Message, state: FSMContext):
     await cmd_start(message, state)
 
 async def handle(request):
-    return web.Response(text="Bot uyg'oq va ishlayapti!")
-
-async def self_ping():
-    await asyncio.sleep(10)
-    render_url = os.getenv("RENDER_EXTERNAL_URL")
-    if not render_url:
-        return
-    while True:
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(render_url) as response:
-                    pass
-        except Exception:
-            pass
-        await asyncio.sleep(420)
+    return web.Response(text="Bot ishlayapti!")
 
 async def web_server():
     app = web.Application()
@@ -470,12 +513,10 @@ async def web_server():
     port = int(os.environ.get("PORT", 10000))
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
-    
-    asyncio.create_task(self_ping())
 
 async def main():
     logging.basicConfig(level=logging.INFO)
-    print("Bot haydovchi kabineti bilan ishga tushdi...")
+    print("Bot uxlab qoladigan rejimda ishga tushdi...")
     await asyncio.gather(web_server(), dp.start_polling(bot))
 
 if __name__ == "__main__":
