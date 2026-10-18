@@ -15,15 +15,14 @@ TOKEN = os.getenv("BOT_TOKEN")
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# Bazalar va statistika
-ORDERS = {}       # Faol buyurtmalar: {order_id: {...}}
-DRIVERS = {}      # Haydovchilar: {driver_id: {...}}
-ALL_USERS = set() # Jami a'zo bo'lgan foydalanuvchilar ID lari
-DAILY_VISITS = set() # Bugun kirgan foydalanuvchilar (kunlik statistika uchun)
+# Bazalar
+ORDERS = {}       # {order_id: {user_id, name, from_city, to_city, passengers, price, phone, lat, lon}}
+DRIVERS = {}      # {driver_id: {name, car, current_city, target_city, lat, lon, balance}}
+ALL_USERS = set()
+DAILY_VISITS = set()
 LAST_VISIT_DATE = datetime.now().date()
 
-# O'zingizning Telegram ID raqamingizni shu yerga yozing (Admin bo'lish uchun)
-ADMIN_ID = 123456789  # <--- O'zingizning ID raqamingizni yozib qo'ying
+ADMIN_ID = 123456789  # O'z ID raqamingizni yozing
 
 class BookingState(StatesGroup):
     waiting_for_lang = State()
@@ -35,6 +34,8 @@ class BookingState(StatesGroup):
 
 class DriverState(StatesGroup):
     waiting_for_car = State()
+    waiting_for_current_city = State()
+    waiting_for_target_city = State()
     waiting_for_location = State()
 
 CITIES = [
@@ -48,7 +49,6 @@ async def cmd_start(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     ALL_USERS.add(user_id)
     
-    # Kunlik statistika uchun sanani tekshiramiz
     global DAILY_VISITS, LAST_VISIT_DATE
     current_date = datetime.now().date()
     if current_date != LAST_VISIT_DATE:
@@ -89,10 +89,9 @@ async def admin_panel(message: types.Message):
     text = (
         f"👑 **Rahbar / Admin paneli**\n\n"
         f"👥 Jami a'zo bo'lgan foydalanuvchilar: **{total_users} ta**\n"
-        f"📅 Bugun botga kirganlar (tashrif): **{today_active} ta**\n"
-        f"📋 Hozirgi faol buyurtmalar: **{total_orders} ta**\n"
-        f"🚖 Ro'yxatdan o'tgan haydovchilar: **{total_drivers} ta**\n\n"
-        f"Server holati: 🌙 Uyqu rejimiga ruxsat berilgan (15 min faoliyatsizlikdan so'ng uxlaydi)"
+        f"📅 Bugun botga kirganlar: **{today_active} ta**\n"
+        f"📋 Faol buyurtmalar: **{total_orders} ta**\n"
+        f"🚖 Ro'yxatdan o'tgan haydovchilar: **{total_drivers} ta**"
     )
     
     builder = ReplyKeyboardBuilder()
@@ -110,6 +109,7 @@ async def refresh_stats(message: types.Message):
 async def back_to_main(message: types.Message, state: FSMContext):
     await cmd_start(message, state)
 
+# --- HAYDIVCHI QISMI VA YO'NALISHNI O'ZGARTIRISH ---
 @dp.message(F.text == "🚖 Haydovchi kabineti")
 async def driver_cabinet(message: types.Message, state: FSMContext):
     driver_id = message.from_user.id
@@ -130,33 +130,61 @@ async def show_driver_menu(message: types.Message):
     driver = DRIVERS[driver_id]
     
     inline_builder = InlineKeyboardBuilder()
-    inline_builder.button(text="📋 Yangi buyurtmalar", callback_data="driver_orders")
+    inline_builder.button(text="📋 Mos buyurtmalar", callback_data="driver_orders")
+    inline_builder.button(text="🔄 Yo'nalishni o'zgartirish", callback_data="change_route")
     inline_builder.button(text="💰 Balansni tekshirish", callback_data="driver_balance")
-    inline_builder.button(text="📍 Lokatsiyani yangilash", callback_data="driver_update_loc")
     inline_builder.adjust(1, 1, 1)
 
     text = (
         f"🚖 **Haydovchi kabineti**\n\n"
         f"👤 Ism: {driver['name']}\n"
         f"🚗 Mashina: {driver['car']}\n"
-        f"💳 Balans: {driver['balance']} so'm\n"
-        f"🟢 Status: Faol"
+        f"📍 Turgan joyi: **{driver['current_city']}** ➔ Boradigan joyi: **{driver['target_city']}**\n"
+        f"💳 Balans: {driver['balance']} so'm"
     )
     await message.answer(text, reply_markup=inline_builder.as_markup(), parse_mode="Markdown")
 
 @dp.message(DriverState.waiting_for_car)
 async def get_driver_car(message: types.Message, state: FSMContext):
     await state.update_data(car=message.text)
+    await state.set_state(DriverState.waiting_for_current_city)
+
+    builder = ReplyKeyboardBuilder()
+    for city in CITIES:
+        builder.button(text=city)
+    builder.adjust(2, 2, 2, 2, 2, 2)
+
+    await message.answer("📍 Hozir qaysi shahardasiz? (Jo'nash punkti):", reply_markup=builder.as_markup(resize_keyboard=True))
+
+@dp.message(DriverState.waiting_for_current_city)
+async def get_driver_current_city(message: types.Message, state: FSMContext):
+    if message.text not in CITIES:
+        return await message.answer("Iltimos, tugmalardagi shaharlardan birini tanlang.")
+    
+    await state.update_data(current_city=message.text)
+    await state.set_state(DriverState.waiting_for_target_city)
+
+    builder = ReplyKeyboardBuilder()
+    for city in CITIES:
+        if city != message.text:
+            builder.button(text=city)
+    builder.adjust(2, 2, 2, 2, 2, 2)
+
+    await message.answer(f"🏁 Qaysi shaharga borasiz? (Hozirgi: {message.text}):", reply_markup=builder.as_markup(resize_keyboard=True))
+
+@dp.message(DriverState.waiting_for_target_city)
+async def get_driver_target_city(message: types.Message, state: FSMContext):
+    if message.text not in CITIES:
+        return await message.answer("Iltimos, tugmalardagi shaharlardan birini tanlang.")
+
+    await state.update_data(target_city=message.text)
     await state.set_state(DriverState.waiting_for_location)
 
     builder = ReplyKeyboardBuilder()
     builder.button(text="📍 Lokatsiyani yuborish", request_location=True)
     builder.adjust(1)
 
-    await message.answer(
-        "Rahmat! Endi haydovchilar bazasiga qo'shilish uchun turgan joyingizni (lokatsiyangizni) yuboring:",
-        reply_markup=builder.as_markup(resize_keyboard=True)
-    )
+    await message.answer("So'nggi qadam: Aniq masofani hisoblash uchun turgan joyingizni (lokatsiyangizni) yuboring:", reply_markup=builder.as_markup(resize_keyboard=True))
 
 @dp.message(DriverState.waiting_for_location, F.location)
 async def get_driver_location(message: types.Message, state: FSMContext):
@@ -166,28 +194,35 @@ async def get_driver_location(message: types.Message, state: FSMContext):
     DRIVERS[driver_id] = {
         "name": message.from_user.first_name,
         "car": data.get("car"),
+        "current_city": data.get("current_city"),
+        "target_city": data.get("target_city"),
         "lat": message.location.latitude,
         "lon": message.location.longitude,
         "balance": 10000
     }
 
-    await message.answer("✅ Ro'yxatdan o'tish yakunlandi!")
+    await message.answer("✅ Muvaffaqiyatli saqlandi!")
     await state.clear()
     await show_driver_menu(message)
+
+# Yo'nalishni o'zgartirish (Misol: Toshkentdan Farg'onaga o'tganda)
+@dp.callback_query(F.data == "change_route")
+async def cb_change_route(callback: types.CallbackQuery, state: FSMContext):
+    await state.set_state(DriverState.waiting_for_current_city)
+    
+    builder = ReplyKeyboardBuilder()
+    for city in CITIES:
+        builder.button(text=city)
+    builder.adjust(2, 2, 2, 2, 2, 2)
+
+    await callback.message.answer("🔄 Yangi jo'nash shahringizni tanlang:", reply_markup=builder.as_markup(resize_keyboard=True))
+    await callback.answer()
 
 @dp.callback_query(F.data == "driver_balance")
 async def cb_driver_balance(callback: types.CallbackQuery):
     driver_id = callback.from_user.id
     balance = DRIVERS[driver_id]["balance"]
     await callback.answer(f"Sizning balansingiz: {balance} so'm", show_alert=True)
-
-@dp.callback_query(F.data == "driver_update_loc")
-async def cb_update_loc(callback: types.CallbackQuery, state: FSMContext):
-    await callback.message.answer("Iltimos, yangi lokatsiyangizni yuboring:", reply_markup=types.ReplyKeyboardMarkup(
-        keyboard=[[types.KeyboardButton(text="📍 Lokatsiyani yuborish", request_location=True)]],
-        resize_keyboard=True
-    ))
-    await callback.answer()
 
 @dp.callback_query(F.data == "driver_orders")
 async def cb_driver_orders(callback: types.CallbackQuery):
@@ -199,25 +234,32 @@ async def cb_driver_orders(callback: types.CallbackQuery):
         return await callback.answer("Hozircha faol buyurtmalar yo'q.", show_alert=True)
 
     driver = DRIVERS[driver_id]
-    await callback.message.answer("🔍 Yaqin atrofdagi buyurtmalar:")
+    found = False
 
     for order_id, order in ORDERS.items():
-        distance = math.sqrt((driver['lat'] - order['lat'])**2 + (driver['lon'] - order['lon'])**2) * 111
-        indicator = "🟢 Yaqin" if distance <= 10 else "🔴 Uzoqroq"
-        
-        text = (
-            f"🚖 **Buyurtma #{order_id}**\n"
-            f"📍 Qayerdan: {order['from_city']}\n"
-            f"🏁 Qayerga: {order['to_city']}\n"
-            f"👥 Yo'lovchilar: {order['passengers']}\n"
-            f"💵 Narx: {order['price']}\n"
-            f"📏 Masofa: ~{round(distance, 1)} km ({indicator})"
-        )
-        
-        inline_builder = InlineKeyboardBuilder()
-        inline_builder.button(text="📞 Kontaktni ochish (2000 so'm)", callback_data=f"open_contact_{order_id}")
-        
-        await callback.message.answer(text, reply_markup=inline_builder.as_markup(), parse_mode="Markdown")
+        # Faqat haydovchining yo'nalishiga mos keladigan buyurtmalarni ko'rsatamiz
+        if order['from_city'] == driver['current_city'] and order['to_city'] == driver['target_city']:
+            found = True
+            distance = math.sqrt((driver['lat'] - order['lat'])**2 + (driver['lon'] - order['lon'])**2) * 111
+            indicator = "🟢 Yaqin" if distance <= 10 else "🔴 Uzoqroq"
+            
+            text = (
+                f"🚖 **Mos keluvchi Buyurtma #{order_id}**\n"
+                f"📍 Qayerdan: {order['from_city']}\n"
+                f"🏁 Qayerga: {order['to_city']}\n"
+                f"👥 Yo'lovchilar: {order['passengers']}\n"
+                f"💵 Narx: {order['price']}\n"
+                f"📏 Masofa: ~{round(distance, 1)} km ({indicator})"
+            )
+            
+            inline_builder = InlineKeyboardBuilder()
+            inline_builder.button(text="📞 Kontaktni ochish (2000 so'm)", callback_data=f"open_contact_{order_id}")
+            
+            await callback.message.answer(text, reply_markup=inline_builder.as_markup(), parse_mode="Markdown")
+
+    if not found:
+        await callback.message.answer(f"Sizning yo'nalishingizga ({driver['current_city']} ➔ {driver['target_city']}) mos keluvchi buyurtmalar hozircha yo'q.")
+    
     await callback.answer()
 
 @dp.callback_query(F.data.startswith("open_contact_"))
@@ -247,7 +289,7 @@ async def open_contact_callback(callback: types.CallbackQuery):
     await callback.message.answer(contact_text, parse_mode="Markdown")
     await callback.answer()
 
-# Yo'lovchi qismi
+# --- YO'LOVCHI QISMI VA AVTOMATIK XABAR YUBORISH (BROADCAST) ---
 @dp.message(BookingState.waiting_for_lang, F.text.in_(["🇺🇿 O'zbekcha", "🇷🇺 Русский"]))
 async def select_language(message: types.Message, state: FSMContext):
     lang = "uz" if "O'zbekcha" in message.text else "ru"
@@ -272,8 +314,7 @@ async def select_from_city(message: types.Message, state: FSMContext):
         return await cmd_start(message, state)
     
     if message.text not in CITIES:
-        err = "Iltimos, tugmalardagi hududlardan birini tanlang." if lang == "uz" else "Пожалуйста, выберите регион с помощью кнопок."
-        return await message.answer(err)
+        return await message.answer("Iltimos, tugmalardagi hududlardan birini tanlang.")
 
     await state.update_data(from_city=message.text)
     await state.set_state(BookingState.waiting_for_to_city)
@@ -301,16 +342,13 @@ async def select_to_city(message: types.Message, state: FSMContext):
                 builder.button(text=city)
         builder.button(text="🔙 Orqaga" if lang == "uz" else "🔙 Назад")
         builder.adjust(2, 2, 2, 2, 2, 2, 1)
-        text = "📍 Qayerdan jo'naysiz? Hududni tanlang:" if lang == "uz" else "📍 Откуда выезжаете? Выберите регион:"
-        return await message.answer(text, reply_markup=builder.as_markup(resize_keyboard=True))
+        return await message.answer("📍 Qayerdan jo'naysiz?", reply_markup=builder.as_markup(resize_keyboard=True))
 
     if message.text not in CITIES:
-        err = "Iltimos, ro'yxatdagi hududlardan birini tanlang." if lang == "uz" else "Пожалуйста, выберите регион из списка."
-        return await message.answer(err)
+        return await message.answer("Iltimos, ro'yxatdagi hududlardan birini tanlang.")
 
     await state.update_data(to_city=message.text, passengers=[])
     await state.set_state(BookingState.waiting_for_passengers)
-
     await show_passenger_menu(message, [], lang)
 
 async def show_passenger_menu(message: types.Message, passengers: list, lang: str):
@@ -323,11 +361,7 @@ async def show_passenger_menu(message: types.Message, passengers: list, lang: st
     builder.adjust(2, 2, 1)
 
     pass_str = " ".join(passengers) if passengers else ("(Hali tanlanmadi)" if lang == "uz" else "(Еще не выбрано)")
-    text = (
-        f"👥 Yo'lovchilar tarkibini tanlang (Maksimal 4 ta):\nJoriy: {pass_str}"
-        if lang == "uz" else
-        f"👥 Выберите состав пассажиров (Максимум 4):\nТекущие: {pass_str}"
-    )
+    text = f"👥 Yo'lovchilar tarkibini tanlang (Maksimal 4 ta):\nJoriy: {pass_str}"
     await message.answer(text, reply_markup=builder.as_markup(resize_keyboard=True))
 
 @dp.message(BookingState.waiting_for_passengers)
@@ -335,18 +369,11 @@ async def handle_passengers(message: types.Message, state: FSMContext):
     data = await state.get_data()
     lang = data.get("lang", "uz")
     passengers = data.get("passengers", [])
-
     text = message.text
 
     if text in ["🔙 Orqaga", "🔙 Назад"]:
         await state.set_state(BookingState.waiting_for_to_city)
-        builder = ReplyKeyboardBuilder()
-        for city in CITIES:
-            if city != data.get("from_city"):
-                builder.button(text=city)
-        builder.button(text="🔙 Orqaga" if lang == "uz" else "🔙 Назад")
-        builder.adjust(2, 2, 2, 2, 2, 2, 1)
-        return await message.answer("🏁 Qayerga borasiz?", reply_markup=builder.as_markup(resize_keyboard=True))
+        return await message.answer("🏁 Qayerga borasiz?")
 
     if text in ["🔄 Tozalash", "🔄 Очистить"]:
         passengers = []
@@ -355,32 +382,21 @@ async def handle_passengers(message: types.Message, state: FSMContext):
 
     if text in ["➡️ Keyingi bo'lim", "➡️ Следующий раздел"]:
         if not passengers:
-            err = "Iltimos, kamida 1 ta yo'lovchini tanlang!" if lang == "uz" else "Пожалуйста, выберите хотя бы 1 пассажира!"
-            return await message.answer(err)
+            return await message.answer("Iltimos, kamida 1 ta yo'lovchini tanlang!")
         
         await state.set_state(BookingState.waiting_for_price)
         builder = ReplyKeyboardBuilder()
         builder.button(text="🔙 Orqaga" if lang == "uz" else "🔙 Назад")
         builder.adjust(1)
-        
-        price_text = (
-            "💵 Yo'lkira uchun bermoqchi bo'lgan summangizni kiriting (masalan: `50000` so'm):"
-            if lang == "uz" else
-            "💵 Введите сумму, которую готовы предложить за поездку (например: `50000` сум):"
-        )
-        return await message.answer(price_text, reply_markup=builder.as_markup(resize_keyboard=True), parse_mode="Markdown")
+        return await message.answer("💵 Yo'lkira uchun bermoqchi bo'lgan summangizni kiriting (masalan: `50000` so'm):", reply_markup=builder.as_markup(resize_keyboard=True), parse_mode="Markdown")
 
     if text in ["👨 Erkak", "👨 Мужчина", "👩 Ayol", "👩 Женщина"]:
         if len(passengers) >= 4:
-            warn = "Maksimal 4 ta yo'lovchi tanlash mumkin!" if lang == "uz" else "Максимум можно выбрать 4 пассажиров!"
-            return await message.answer(warn)
-        
+            return await message.answer("Maksimal 4 ta yo'lovchi tanlash mumkin!")
         emoji = "👨" if "Erkak" in text or "Мужчина" in text else "👩"
         passengers.append(emoji)
         await state.update_data(passengers=passengers)
         return await show_passenger_menu(message, passengers, lang)
-    
-    await message.answer("Iltimos, pastdagi tugmalardan foydalaning.")
 
 @dp.message(BookingState.waiting_for_price)
 async def enter_price(message: types.Message, state: FSMContext):
@@ -395,16 +411,11 @@ async def enter_price(message: types.Message, state: FSMContext):
     await state.set_state(BookingState.waiting_for_contact)
 
     builder = ReplyKeyboardBuilder()
-    builder.button(text="📱 Kontaktni yuborish" if lang == "uz" else "📱 Отправить контакт", request_contact=True)
-    builder.button(text="🔙 Orqaga" if lang == "uz" else "🔙 Назад")
+    builder.button(text="📱 Kontaktni yuborish", request_contact=True)
+    builder.button(text="🔙 Orqaga")
     builder.adjust(1, 1)
 
-    text = (
-        "📞 Iltimos, aloqa uchun pastdagi **'📱 Kontaktni yuborish'** tugmasini bosing:"
-        if lang == "uz" else
-        "📞 Пожалуйста, нажмите кнопку **'📱 Отправить контакт'** ниже:"
-    )
-    await message.answer(text, reply_markup=builder.as_markup(resize_keyboard=True), parse_mode="Markdown")
+    await message.answer("📞 Iltimos, aloqa uchun pastdagi **'📱 Kontaktni yuborish'** tugmasini bosing:", reply_markup=builder.as_markup(resize_keyboard=True), parse_mode="Markdown")
 
 @dp.message(BookingState.waiting_for_contact, F.contact)
 async def get_contact(message: types.Message, state: FSMContext):
@@ -428,36 +439,40 @@ async def get_contact(message: types.Message, state: FSMContext):
         "lon": 69.2401
     }
 
-    if lang == "uz":
-        response_text = (
-            f"Rahmat, {name}! Buyurtmangiz qabul qilindi ✅\n\n"
-            f"📋 **Buyurtma tafsilotlari:**\n"
-            f"📍 Qayerdan: {data.get('from_city')}\n"
-            f"🏁 Qayerga: {data.get('to_city')}\n"
-            f"👥 Odamlar: {pass_summary}\n"
-            f"💵 Taklif qilingan narx: {data.get('price')}\n"
-            f"📞 Tel raqam: `+{phone}`\n\n"
-            "Tez orada haydovchilarimiz siz bilan bog'lanishadi."
-        )
-        cancel_btn_text = "❌ Buyurtmani bekor qilish / Qaytadan"
-    else:
-        response_text = (
-            f"Спасибо, {name}! Ваш заказ принят ✅\n\n"
-            f"📋 **Детали заказа:**\n"
-            f"📍 Откуда: {data.get('from_city')}\n"
-            f"🏁 Куда: {data.get('to_city')}\n"
-            f"👥 Пассажиры: {pass_summary}\n"
-            f"💵 Предложенная цена: {data.get('price')}\n"
-            f"📞 Телефон: `+{phone}`\n\n"
-            "Скоро наши водители свяжутся с вами."
-        )
-        cancel_btn_text = "❌ Отменить заказ / Заново"
+    response_text = (
+        f"Rahmat, {name}! Buyurtmangiz qabul qilindi ✅\n\n"
+        f"📋 **Buyurtma tafsilotlari:**\n"
+        f"📍 Qayerdan: {data.get('from_city')}\n"
+        f"🏁 Qayerga: {data.get('to_city')}\n"
+        f"👥 Odamlar: {pass_summary}\n"
+        f"💵 Taklif qilingan narx: {data.get('price')}\n"
+        f"📞 Tel raqam: `+{phone}`\n\n"
+        "Tez orada haydovchilarimiz siz bilan bog'lanishadi."
+    )
 
     inline_builder = InlineKeyboardBuilder()
-    inline_builder.button(text=cancel_btn_text, callback_data=f"cancel_order_{order_id}")
+    inline_builder.button(text="❌ Buyurtmani bekor qilish", callback_data=f"cancel_order_{order_id}")
 
     await message.answer(response_text, reply_markup=inline_builder.as_markup(), parse_mode="Markdown")
     await state.clear()
+
+    # --- MOS KELADIGAN HAYDOVCHILARGA AVTOMATIK XABAR YUBORISH (BROADCAST) ---
+    order = ORDERS[order_id]
+    for driver_id, driver in DRIVERS.items():
+        if driver['current_city'] == order['from_city'] and driver['target_city'] == order['to_city']:
+            try:
+                alert_text = (
+                    f"🔔 **Yangi mos buyurtma tushdi! (#{order_id})**\n"
+                    f"📍 Qayerdan: {order['from_city']}\n"
+                    f"🏁 Qayerga: {order['to_city']}\n"
+                    f"👥 Odamlar: {order['passengers']}\n"
+                    f"💵 Narx: {order['price']}"
+                )
+                drv_builder = InlineKeyboardBuilder()
+                drv_builder.button(text="📞 Kontaktni ochish (2000 so'm)", callback_data=f"open_contact_{order_id}")
+                await bot.send_message(driver_id, alert_text, reply_markup=drv_builder.as_markup(), parse_mode="Markdown")
+            except Exception:
+                pass
 
 @dp.callback_query(F.data.startswith("cancel_order_"))
 async def cancel_order_callback(callback: types.CallbackQuery, state: FSMContext):
@@ -466,37 +481,15 @@ async def cancel_order_callback(callback: types.CallbackQuery, state: FSMContext
         del ORDERS[order_id]
 
     await callback.answer("Buyurtma bekor qilindi!")
-    await state.set_state(BookingState.waiting_for_from_city)
-    lang = "uz"
-
-    builder = ReplyKeyboardBuilder()
-    for city in CITIES:
-        builder.button(text=city)
-    builder.button(text="🔙 Orqaga" if lang == "uz" else "🔙 Назад")
-    builder.adjust(2, 2, 2, 2, 2, 2, 1)
-
-    text = "❌ Buyurtma bekor qilindi.\n\n📍 Qayerdan jo'naysiz? Hududni tanlang:" if lang == "uz" else "❌ Заказ отменен.\n\n📍 Откуда выезжаете? Выберите регион:"
-    
     await callback.message.edit_text("❌ Buyurtma bekor qilindi.")
-    await callback.message.answer(text, reply_markup=builder.as_markup(resize_keyboard=True))
+    await cmd_start(callback.message, state)
 
 @dp.message(BookingState.waiting_for_contact)
 async def wrong_contact(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-    lang = data.get("lang", "uz")
-
     if message.text in ["🔙 Orqaga", "🔙 Назад"]:
         await state.set_state(BookingState.waiting_for_price)
-        builder = ReplyKeyboardBuilder()
-        builder.button(text="🔙 Orqaga" if lang == "uz" else "🔙 Назад")
-        return await message.answer("💵 Summani qaytadan kiriting:", reply_markup=builder.as_markup(resize_keyboard=True))
-
-    err = (
-        "⚠️ Iltimos, qo'lda raqam yozmang, faqat pastdagi '📱 Kontaktni yuborish' tugmasini bosing!"
-        if lang == "uz" else
-        "⚠️ Пожалуйста, не пишите номер вручную, нажмите кнопку '📱 Отправить контакт' ниже!"
-    )
-    await message.answer(err)
+        return await message.answer("💵 Summani qaytadan kiriting:")
+    await message.answer("⚠️ Iltimos, faqat pastdagi '📱 Kontaktni yuborish' tugmasini bosing!")
 
 @dp.message()
 async def echo_text(message: types.Message, state: FSMContext):
@@ -516,7 +509,7 @@ async def web_server():
 
 async def main():
     logging.basicConfig(level=logging.INFO)
-    print("Bot uxlab qoladigan rejimda ishga tushdi...")
+    print("Bot haydovchi yo'nalishlari va avtomatik bildirishnoma bilan ishga tushdi...")
     await asyncio.gather(web_server(), dp.start_polling(bot))
 
 if __name__ == "__main__":
