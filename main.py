@@ -441,7 +441,7 @@ async def handle_driver_app(request):
 
         initApp();
 
-        // Rasmni Base64 ga aylantirish (100% ishlaydi)
+        // Rasmni Base64 ga aylantirish
         function processFile(inputId, hiddenId, statusId) {{
             let fileInput = document.getElementById(inputId);
             let file = fileInput.files[0];
