@@ -1,6 +1,7 @@
 import os
 import asyncio
 import logging
+import json
 from datetime import datetime
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
@@ -14,14 +15,16 @@ bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
 ORDERS = {}       
+DRIVERS = {}      
 ALL_USERS = set()
 DAILY_VISITS = set()
 LAST_VISIT_DATE = datetime.now().date()
 
-ADMIN_ID = 123456789  # O'z admin ID raqamingizni yozing
+ADMIN_ID = 123456789  # O'zingizning Telegram ID raqamingizni kiriting
 
 class BookingState(StatesGroup):
     waiting_for_lang = State()
+    waiting_for_role = State()        
     waiting_for_from_city = State()
     waiting_for_to_city = State()
     waiting_for_passengers = State()
@@ -34,6 +37,7 @@ CITIES = [
     "Guliston", "Termiz", "Urganch", "Nukus"
 ]
 
+# --- START BUYRUG'I ---
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
@@ -74,12 +78,14 @@ async def admin_panel(message: types.Message):
     total_users = len(ALL_USERS)
     today_active = len(DAILY_VISITS)
     total_orders = len(ORDERS)
+    total_drivers = len(DRIVERS)
 
     text = (
         f"👑 **Admin paneli**\n\n"
         f"👥 Jami foydalanuvchilar: **{total_users} ta**\n"
         f"📅 Bugun kirganlar: **{today_active} ta**\n"
-        f"📋 Faol buyurtmalar: **{total_orders} ta**"
+        f"📋 Faol buyurtmalar: **{total_orders} ta**\n"
+        f"🚖 Ro'yxatdan o'tgan haydovchilar: **{total_drivers} ta**"
     )
     
     builder = ReplyKeyboardBuilder()
@@ -97,22 +103,93 @@ async def refresh_stats(message: types.Message):
 async def back_to_main(message: types.Message, state: FSMContext):
     await cmd_start(message, state)
 
-# --- TILNI TANLASH VA BUYURTMANi BOSHLASH ---
+# --- TIL VA ROLNI TANLASH ---
 @dp.message(BookingState.waiting_for_lang, F.text.in_(["🇺🇿 O'zbekcha", "🇷🇺 Русский"]))
 async def select_language(message: types.Message, state: FSMContext):
     lang = "uz" if "O'zbekcha" in message.text else "ru"
     await state.update_data(lang=lang)
-    await state.set_state(BookingState.waiting_for_from_city)
+    await state.set_state(BookingState.waiting_for_role)
 
     builder = ReplyKeyboardBuilder()
-    for city in CITIES:
-        builder.button(text=city)
-    builder.adjust(2, 2, 2, 2, 2, 2, 1)
+    if lang == "uz":
+        builder.button(text="👤 Yo'lovchi")
+        builder.button(text="🚖 Haydovchi kabineti")
+        text = "Siz kimsiz? Iltimos, o'z rolingizni tanlang:"
+    else:
+        builder.button(text="👤 Пассажир")
+        builder.button(text="🚖 Кабинет водителя")
+        text = "Кто вы? Пожалуйста, выберите свою роль:"
+    
+    builder.adjust(2)
+    await message.answer(text, reply_markup=builder.as_markup(resize_keyboard=True))
 
-    city_text = "📍 Qayerdan jo'naysiz? Hududni tanlang:" if lang == "uz" else "📍 Откуда выезжаете? Выберите регион:"
-    await message.answer(city_text, reply_markup=builder.as_markup(resize_keyboard=True))
+@dp.message(BookingState.waiting_for_role)
+async def select_role(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    lang = data.get("lang", "uz")
+    text = message.text
 
-# --- YO'LOVCHI QISMI (SHAHARLAR VA SO'ROVNOMA) ---
+    # 1. Yo'lovchi tanlanganda:
+    if text in ["👤 Yo'lovchi", "👤 Пассажир"]:
+        await state.set_state(BookingState.waiting_for_from_city)
+        builder = ReplyKeyboardBuilder()
+        for city in CITIES:
+            builder.button(text=city)
+        builder.adjust(2, 2, 2, 2, 2, 2)
+
+        city_text = "📍 Qayerdan jo'naysiz? Hududni tanlang:" if lang == "uz" else "📍 Откуда выезжаете? Выберите регион:"
+        return await message.answer(city_text, reply_markup=builder.as_markup(resize_keyboard=True))
+
+    # 2. Haydovchi kabineti tanlanganda:
+    elif text in ["🚖 Haydovchi kabineti", "🚖 Кабинет водителя"]:
+        driver_id = message.from_user.id
+        
+        # Render'dagi ilovaning o'z URL manzilini olamiz
+        render_url = os.getenv("RENDER_EXTERNAL_URL", "")
+        webapp_url = f"{render_url}/driver-form?lang={lang}&user_id={driver_id}"
+        
+        inline_builder = InlineKeyboardBuilder()
+        inline_builder.button(
+            text="📝 Anketani to'ldirish (Mini App)" if lang == "uz" else "📝 Заполнить анкету (Mini App)",
+            web_app=types.WebAppInfo(url=webapp_url)
+        )
+        
+        intro_text = (
+            "🚖 **Haydovchi kabineti**\n\n"
+            "Ro'yxatdan o'tish va buyurtmalarni ko'rish uchun pastdagi tugmani bosing va anketani to'ldiring:"
+            if lang == "uz" else
+            "🚖 **Кабинет водителя**\n\n"
+            "Для регистрации нажмите на кнопку ниже и заполните анкету:"
+        )
+        return await message.answer(intro_text, reply_markup=inline_builder.as_markup(), parse_mode="Markdown")
+
+    else:
+        err = "Iltimos, tugmalardan birini tanlang!" if lang == "uz" else "Пожалуйста, выберите с помощью кнопок!"
+        return await message.answer(err)
+
+# --- MINI APP DAN KELGAN HAYDOVCHI MA'LUMOTLARINI QABUL QILISH ---
+@dp.message(F.web_app_data)
+async def handle_web_app_data(message: types.Message):
+    try:
+        data = json.loads(message.web_app_data.data)
+        driver_id = message.from_user.id
+        
+        DRIVERS[driver_id] = {
+            "name": data.get("name"),
+            "phone": data.get("phone"),
+            "car": data.get("car"),
+            "current_city": data.get("from_city"),
+            "target_city": data.get("to_city"),
+            "lang": data.get("lang", "uz")
+        }
+
+        lang = data.get("lang", "uz")
+        msg = "✅ Anketangiz qabul qilindi! Haydovchi sifatida ro'yxatdan o'tdingiz." if lang == "uz" else "✅ Ваши данные приняты! Вы зарегистрированы как водитель."
+        await message.answer(msg)
+    except Exception:
+        await message.answer("❌ Ma'lumotlarni saqlashda xatolik yuz berdi.")
+
+# --- YO'LOVCHI SO'ROVNOMASI (Siz tasdiqlagan qism) ---
 @dp.message(BookingState.waiting_for_from_city)
 async def select_from_city(message: types.Message, state: FSMContext):
     data = await state.get_data()
@@ -145,7 +222,7 @@ async def select_to_city(message: types.Message, state: FSMContext):
         for city in CITIES:
             if city != data.get("from_city"):
                 builder.button(text=city)
-        builder.adjust(2, 2, 2, 2, 2, 2, 1)
+        builder.adjust(2, 2, 2, 2, 2, 2)
         return await message.answer("📍 Qayerdan jo'naysiz?", reply_markup=builder.as_markup(resize_keyboard=True))
 
     if message.text not in CITIES:
@@ -289,28 +366,108 @@ async def cancel_order_callback(callback: types.CallbackQuery, state: FSMContext
     await callback.message.edit_text("❌ Buyurtma bekor qilindi.")
     await cmd_start(callback.message, state)
 
-@dp.message(BookingState.waiting_for_contact)
-async def wrong_contact(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-    lang = data.get("lang", "uz")
-    if message.text in ["🔙 Orqaga", "🔙 Назад"]:
-        await state.set_state(BookingState.waiting_for_price)
-        return await message.answer("💵 Summani qaytadan kiriting:" if lang == "uz" else "💵 Введите сумму заново:")
-    
-    err_c = "⚠️ Iltimos, faqat pastdagi 'Kontaktni yuborish' tugmasini bosing!" if lang == "uz" else "⚠️ Пожалуйста, нажмите кнопку 'Отправить контакт' ниже!"
-    await message.answer(err_c)
-
 @dp.message()
 async def echo_text(message: types.Message, state: FSMContext):
     await cmd_start(message, state)
 
-# --- RENDER PORT TALABINI BAJARISH UCHUN WEB SERVER ---
+# --- WEB SERVER VA HAYDOVCHI MINI APP HTML KODI ---
+async def handle_driver_form(request):
+    lang = request.query.get("lang", "uz")
+    
+    html_content = f"""
+    <!DOCTYPE html>
+    <html lang="{lang}">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Haydovchi Anketasi</title>
+        <script src="https://telegram.org/js/telegram-web-app.js"></script>
+        <style>
+            body {{
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                background-color: var(--tg-theme-bg-color, #f4f4f9);
+                color: var(--tg-theme-text-color, #222);
+                margin: 0; padding: 20px;
+            }}
+            .card {{
+                background: var(--tg-theme-secondary-bg-color, #ffffff);
+                padding: 20px; border-radius: 16px;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+                max-width: 400px; margin: auto;
+            }}
+            h2 {{ text-align: center; color: var(--tg-theme-button-color, #0088cc); margin-bottom: 20px; }}
+            label {{ font-size: 14px; font-weight: 600; display: block; margin-top: 12px; margin-bottom: 4px; }}
+            input, select {{
+                width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px;
+                font-size: 15px; box-sizing: border-box; background: #fafafa;
+            }}
+            button {{
+                width: 100%; background-color: var(--tg-theme-button-color, #0088cc);
+                color: var(--tg-theme-button-text-color, #fff); border: none;
+                padding: 14px; border-radius: 10px; font-size: 16px; font-weight: bold;
+                cursor: pointer; margin-top: 24px;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <h2>🚖 {"Haydovchi Anketasi" if lang=="uz" else "Анкета Водителя"}</h2>
+            <form id="driverForm">
+                <label>{"Ism va Familiya:" if lang=="uz" else "Имя и Фамилия:"}</label>
+                <input type="text" id="name" required placeholder="{"Masalan: Sardor Rahimov" if lang=="uz" else "Например: Сардор Рахимов"}">
+
+                <label>{"Telefon raqam:" if lang=="uz" else "Номер телефона:"}</label>
+                <input type="tel" id="phone" required placeholder="+998901234567">
+
+                <label>{"Mashina rusumi va raqami:" if lang=="uz" else "Модель и номер машины:"}</label>
+                <input type="text" id="car" required placeholder="Gentra 01 A 777 AA">
+
+                <label>{"Hozirgi shahar (Jo'nash):" if lang=="uz" else "Текущий город (Откуда):"}</label>
+                <select id="from_city">
+                    {"".join([f'<option value="{c}">{c}</option>' for c in CITIES])}
+                </select>
+
+                <label>{"Boradigan shahar:" if lang=="uz" else "Город назначения (Куда):"}</label>
+                <select id="to_city">
+                    {"".join([f'<option value="{c}">{c}</option>' for c in CITIES])}
+                </select>
+
+                <button type="submit">{"Ro'yxatdan o'tish" if lang=="uz" else "Зарегистрироваться"}</button>
+            </form>
+        </div>
+
+        <script>
+            let tg = window.Telegram.WebApp;
+            tg.expand();
+
+            document.getElementById('driverForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                let data = {
+                    name: document.getElementById('name').value,
+                    phone: document.getElementById('phone').value,
+                    car: document.getElementById('car').value,
+                    from_city: document.getElementById('from_city').value,
+                    to_city: document.getElementById('to_city').value,
+                    lang: "{lang}"
+                };
+                tg.sendData(JSON.stringify(data));
+                tg.close();
+            });
+        </script>
+    </body>
+    </html>
+    """
+    return web.Response(text=html_content, content_type='text/html')
+
 async def handle_home(request):
-    return web.Response(text="Safar Taxi Yo'lovchi boti ishlamoqda!")
+    return web.Response(text="Safar Taxi Bot va Mini App ishlamoqda!")
 
 async def web_server():
     app = web.Application()
-    app.add_routes([web.get("/", handle_home)])
+    app.add_routes([
+        web.get("/", handle_home),
+        web.get("/driver-form", handle_driver_form)
+    ])
     runner = web.AppRunner(app)
     await runner.setup()
     port = int(os.environ.get("PORT", 10000))
@@ -319,7 +476,7 @@ async def web_server():
 
 async def main():
     logging.basicConfig(level=logging.INFO)
-    print("Yo'lovchi boti va server muvaffaqiyatli ishga tushdi...")
+    print("Bot va Haydovchi Mini App serveri ishga tushdi...")
     await asyncio.gather(web_server(), dp.start_polling(bot))
 
 if __name__ == "__main__":
