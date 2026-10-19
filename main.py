@@ -2,7 +2,6 @@ import os
 import asyncio
 import logging
 import json
-import uuid
 from datetime import datetime
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
@@ -22,9 +21,6 @@ DAILY_VISITS = set()
 LAST_VISIT_DATE = datetime.now().date()
 
 ADMIN_ID = 123456789  # Telegram ID raqamingiz
-
-UPLOAD_DIR = "uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 class BookingState(StatesGroup):
     waiting_for_lang = State()
@@ -153,27 +149,6 @@ async def handle_web_app_data(message: types.Message):
     except Exception:
         await message.answer("❌ Xatolik yuz berdi.")
 
-# Rasm yuklash Endpoint
-async def handle_upload(request):
-    reader = await request.multipart()
-    field = await reader.next()
-    if not field:
-        return web.json_response({"error": "No file uploaded"}, status=400)
-    
-    filename = f"{uuid.uuid4()}.jpg"
-    filepath = os.path.join(UPLOAD_DIR, filename)
-    
-    with open(filepath, "wb") as f:
-        while True:
-            chunk = await field.read_chunk()
-            if not chunk:
-                break
-            f.write(chunk)
-            
-    file_url = f"{request.scheme}://{request.host}/uploads/{filename}"
-    return web.json_response({"url": file_url})
-
-# Mini App HTML
 async def handle_driver_app(request):
     lang = request.query.get("lang", "uz")
     cities = CITIES_UZ if lang == "uz" else CITIES_RU
@@ -308,7 +283,7 @@ async def handle_driver_app(request):
         }}
         .profile-img {{ width: 90px; height: 90px; border-radius: 50%; object-fit: cover; display: block; margin: 0 auto 12px auto; border: 2px solid #0088cc; }}
         .car-big-img {{ width: 100%; height: 180px; border-radius: 10px; object-fit: cover; margin-top: 12px; display: block; }}
-        .loading {{ text-align: center; font-size: 12px; color: #0088cc; display: none; margin-top: 4px; }}
+        .status-msg {{ font-size: 12px; color: green; display: none; margin-top: 4px; font-weight: bold; }}
     </style>
 </head>
 <body>
@@ -322,9 +297,9 @@ async def handle_driver_app(request):
                 <input type="text" id="reg_name" required placeholder="Sardor Rahimov">
 
                 <label>{l_photo}</label>
-                <input type="file" id="file_profile" accept="image/*" required onchange="uploadImage('file_profile', 'reg_profile_photo')">
+                <input type="file" id="file_profile" accept="image/*" required onchange="processFile('file_profile', 'reg_profile_photo', 'status_profile')">
                 <input type="hidden" id="reg_profile_photo">
-                <div id="loading_file_profile" class="loading">Yuklanmoqda...</div>
+                <div id="status_profile" class="status-msg">✅ Rasm tanlandi!</div>
 
                 <label>{l_phone}</label>
                 <input type="tel" id="reg_phone" required placeholder="+998901234567">
@@ -336,9 +311,9 @@ async def handle_driver_app(request):
                 <input type="text" id="reg_car_plate" required placeholder="01 A 777 AA">
 
                 <label>{l_car1}</label>
-                <input type="file" id="file_car1" accept="image/*" required onchange="uploadImage('file_car1', 'reg_car_photo1')">
+                <input type="file" id="file_car1" accept="image/*" required onchange="processFile('file_car1', 'reg_car_photo1', 'status_car1')">
                 <input type="hidden" id="reg_car_photo1">
-                <div id="loading_file_car1" class="loading">Yuklanmoqda...</div>
+                <div id="status_car1" class="status-msg">✅ Rasm tanlandi!</div>
 
                 <button type="submit" id="submitBtn">{btn_reg}</button>
             </form>
@@ -454,7 +429,7 @@ async def handle_driver_app(request):
             if (driverData) {{
                 try {{
                     let parsed = JSON.parse(driverData);
-                    if (parsed && parsed.name) {{
+                    if (parsed && parsed.name && parsed.profile_photo) {{
                         showDashboard(parsed);
                         return;
                     }}
@@ -466,35 +441,18 @@ async def handle_driver_app(request):
 
         initApp();
 
-        async function uploadImage(inputId, hiddenId) {{
+        // Rasmni Base64 ga aylantirish (100% ishlaydi)
+        function processFile(inputId, hiddenId, statusId) {{
             let fileInput = document.getElementById(inputId);
-            let loadingEl = document.getElementById('loading_' + inputId);
             let file = fileInput.files[0];
             if (!file) return;
 
-            let formData = new FormData();
-            formData.append('file', file);
-
-            loadingEl.style.display = 'block';
-
-            try {{
-                let response = await fetch('/upload', {{
-                    method: 'POST',
-                    body: formData
-                }});
-                let result = await response.json();
-                if (result.url) {{
-                    document.getElementById(hiddenId).value = result.url;
-                    loadingEl.innerText = "✅ Yuklandi!";
-                    loadingEl.style.color = "green";
-                }} else {{
-                    alert("Xatolik!");
-                    loadingEl.style.display = 'none';
-                }}
-            }} catch (err) {{
-                alert("Server bilan aloqa yo'q!");
-                loadingEl.style.display = 'none';
-            }}
+            let reader = new FileReader();
+            reader.onload = function(e) {{
+                document.getElementById(hiddenId).value = e.target.result;
+                document.getElementById(statusId).style.display = 'block';
+            }};
+            reader.readAsDataURL(file);
         }}
 
         document.getElementById('regForm').addEventListener('submit', function(e) {{
@@ -503,7 +461,7 @@ async def handle_driver_app(request):
             let cPhoto1 = document.getElementById('reg_car_photo1').value;
 
             if (!pPhoto || !cPhoto1) {{
-                alert("Iltimos, rasmlar yuklanishini kuting!");
+                alert("Iltimos, ikkala rasmni ham tanlang!");
                 return;
             }}
 
@@ -559,7 +517,7 @@ async def handle_driver_app(request):
         }}
 
         function clearData() {{
-            if (confirm("Haqiqatan ham ma'lumotlarni o'chirib, noldan ro'yxatdan o'tmoqchimisiz?")) {{
+            if (confirm("Ma'lumotlarni o'chirib, qayta ro'yxatdan o'tasizmi?")) {{
                 localStorage.removeItem('safar_driver');
                 location.reload();
             }}
@@ -586,8 +544,6 @@ async def web_server():
     app = web.Application()
     app.router.add_get("/", handle_home)
     app.router.add_get("/driver-app", handle_driver_app)
-    app.router.add_post("/upload", handle_upload)
-    app.router.add_static("/uploads", UPLOAD_DIR)
 
     runner = web.AppRunner(app)
     await runner.setup()
