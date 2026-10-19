@@ -14,7 +14,31 @@ TOKEN = os.getenv("BOT_TOKEN", "YOUR_TELEGRAM_BOT_TOKEN_HERE")
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-ORDERS = {}       
+ORDERS = {
+    "1": {
+        "id": "1",
+        "name": "Ali Valiyev",
+        "from_city": "Toshkent",
+        "to_city": "Buxoro",
+        "passengers": "👨 👨",
+        "price": "70000",
+        "phone": "998901234567",
+        "type": "🚖 Yo'lovchi",
+        "comment": "Sumka bor"
+    },
+    "2": {
+        "id": "2",
+        "name": "Sardor",
+        "from_city": "Toshkent",
+        "to_city": "Buxoro",
+        "passengers": "📦 Pochta",
+        "price": "50000",
+        "phone": "998919876543",
+        "type": "📦 Dastafka",
+        "comment": "Kichik quti (hujjatlar)"
+    }
+}
+
 DRIVERS = {}      
 ALL_USERS = set()
 DAILY_VISITS = set()
@@ -149,6 +173,11 @@ async def handle_web_app_data(message: types.Message):
     except Exception:
         await message.answer("❌ Xatolik yuz berdi.")
 
+# API ORDERS GET
+async def handle_get_orders(request):
+    return web.json_response(list(ORDERS.values()))
+
+# API DRIVER APP HTML
 async def handle_driver_app(request):
     lang = request.query.get("lang", "uz")
     cities = CITIES_UZ if lang == "uz" else CITIES_RU
@@ -172,13 +201,12 @@ async def handle_driver_app(request):
         l_from = "Jo'nash shahri:"
         l_to = "Boradigan shahar:"
         l_pass_cnt = "Odamlar soni (Maksimal):"
-        l_mode = "Ish tartibi (Dastavka / Yo'lovchi):"
+        l_mode = "Ish tartibi:"
         mode_1 = "🚖 Faqat yo'lovchi"
         mode_2 = "📦 Faqat dastafka (yuk)"
-        mode_3 = "📦 ➡️ 🚖 Avval dastafka, keyin yo'lovchi"
-        mode_4 = "🚖 ➡️ 📦 Avval yo'lovchi, keyin dastafka"
-        l_min_p = "1 odam uchun Minimal narx (so'm):"
-        l_max_p = "1 odam uchun Maksimal narx (so'm):"
+        mode_3 = "🚖 + 📦 Yo'lovchi va Dastafka (Ikkalasi birga)"
+        l_min_p = "1 odam uchun narx (eng kam so'mda):"
+        l_min_d = "Dastavka / Pochta narxi (eng kam so'mda):"
         btn_save = "Saqlash"
         t_orders = "Mos keluvchi Yo'lovchilar"
         no_orders = "Hozircha buyurtmalar yo'q."
@@ -208,13 +236,12 @@ async def handle_driver_app(request):
         l_from = "Город отправления:"
         l_to = "Город назначения:"
         l_pass_cnt = "Количество пассажиров (Макс):"
-        l_mode = "Режим работы (Доставка / Пассажир):"
+        l_mode = "Режим работы:"
         mode_1 = "🚖 Только пассажир"
         mode_2 = "📦 Только доставка (груз)"
-        mode_3 = "📦 ➡️ 🚖 Сначала доставка, потом пассажир"
-        mode_4 = "🚖 ➡️ 📦 Сначала пассажир, потом доставка"
-        l_min_p = "Минимальная цена за 1 чел (сум):"
-        l_max_p = "Максимальная цена за 1 чел (сум):"
+        mode_3 = "🚖 + 📦 Пассажир и Доставка (Вместе)"
+        l_min_p = "Мин. цена за 1 чел (в сумах):"
+        l_min_d = "Мин. цена за доставку (в сумах):"
         btn_save = "Сохранить"
         t_orders = "Подходящие Пассажиры"
         no_orders = "Пока нет заказов."
@@ -284,6 +311,19 @@ async def handle_driver_app(request):
         .profile-img {{ width: 90px; height: 90px; border-radius: 50%; object-fit: cover; display: block; margin: 0 auto 12px auto; border: 2px solid #0088cc; }}
         .car-big-img {{ width: 100%; height: 180px; border-radius: 10px; object-fit: cover; margin-top: 12px; display: block; }}
         .status-msg {{ font-size: 12px; color: green; display: none; margin-top: 4px; font-weight: bold; }}
+
+        /* Order Box Style */
+        .order-card {{
+            border-left: 4px solid #0088cc; padding: 12px;
+            margin-bottom: 12px; background: rgba(0,136,204,0.05);
+            border-radius: 0 10px 10px 0;
+        }}
+        .order-title {{ font-weight: bold; font-size: 15px; margin-bottom: 6px; }}
+        .order-info {{ font-size: 13px; color: #555; margin-bottom: 4px; }}
+        .buy-btn {{
+            background-color: #27ae60; padding: 8px; font-size: 13px;
+            margin-top: 8px;
+        }}
     </style>
 </head>
 <body>
@@ -363,15 +403,14 @@ async def handle_driver_app(request):
                     <select id="set_work_mode">
                         <option value="{mode_1}">{mode_1}</option>
                         <option value="{mode_2}">{mode_2}</option>
-                        <option value="{mode_3}">{mode_3}</option>
-                        <option value="{mode_4}">{mode_4}</option>
+                        <option value="{mode_3}" selected>{mode_3}</option>
                     </select>
 
                     <label>{l_min_p}</label>
                     <input type="number" id="set_min_price" value="50000">
 
-                    <label>{l_max_p}</label>
-                    <input type="number" id="set_max_price" value="150000">
+                    <label>{l_min_d}</label>
+                    <input type="number" id="set_min_delivery_price" value="30000">
 
                     <button type="submit">{btn_save}</button>
                 </form>
@@ -424,6 +463,8 @@ async def handle_driver_app(request):
         let tg = window.Telegram.WebApp;
         tg.expand();
 
+        let openedOrders = JSON.parse(localStorage.getItem('opened_orders') || '[]');
+
         function initApp() {{
             let driverData = localStorage.getItem('safar_driver');
             if (driverData) {{
@@ -441,7 +482,6 @@ async def handle_driver_app(request):
 
         initApp();
 
-        // Rasmni Base64 ga aylantirish
         function processFile(inputId, hiddenId, statusId) {{
             let fileInput = document.getElementById(inputId);
             let file = fileInput.files[0];
@@ -475,9 +515,9 @@ async def handle_driver_app(request):
                 from_city: "Toshkent",
                 to_city: "Buxoro",
                 passengers_count: 4,
-                work_mode: "{mode_1}",
+                work_mode: "{mode_3}",
                 min_price: 50000,
-                max_price: 150000,
+                min_delivery_price: 30000,
                 balance: 15000,
                 lang: "{lang}"
             }};
@@ -485,6 +525,22 @@ async def handle_driver_app(request):
             localStorage.setItem('safar_driver', JSON.stringify(data));
             tg.sendData(JSON.stringify(data));
             showDashboard(data);
+        }});
+
+        document.getElementById('settingsForm').addEventListener('submit', function(e) {{
+            e.preventDefault();
+            let data = JSON.parse(localStorage.getItem('safar_driver'));
+            data.from_city = document.getElementById('set_from').value;
+            data.to_city = document.getElementById('set_to').value;
+            data.passengers_count = document.getElementById('set_passengers').value;
+            data.work_mode = document.getElementById('set_work_mode').value;
+            data.min_price = document.getElementById('set_min_price').value;
+            data.min_delivery_price = document.getElementById('set_min_delivery_price').value;
+
+            localStorage.setItem('safar_driver', JSON.stringify(data));
+            tg.sendData(JSON.stringify(data));
+            alert("✅ Saqlandi!");
+            loadOrders();
         }});
 
         function showDashboard(data) {{
@@ -501,7 +557,72 @@ async def handle_driver_app(request):
             document.getElementById('b_balance').innerText = data.balance;
             document.getElementById('p_car1').src = data.car_photo1;
 
+            document.getElementById('set_from').value = data.from_city || "Toshkent";
+            document.getElementById('set_to').value = data.to_city || "Buxoro";
+            document.getElementById('set_passengers').value = data.passengers_count || 4;
+            document.getElementById('set_work_mode').value = data.work_mode || "{mode_3}";
+            document.getElementById('set_min_price').value = data.min_price || 50000;
+            document.getElementById('set_min_delivery_price').value = data.min_delivery_price || 30000;
+
             switchTab(1);
+        }}
+
+        async function loadOrders() {{
+            let listEl = document.getElementById('ordersList');
+            try {{
+                let res = await fetch('/api/orders');
+                let orders = await res.json();
+                
+                if(!orders || orders.length === 0) {{
+                    listEl.innerHTML = '<p style="text-align: center; color: #777;">Hozircha buyurtmalar yo\'q.</p>';
+                    return;
+                }}
+
+                let html = '';
+                orders.forEach(o => {{
+                    let isOpened = openedOrders.includes(o.id);
+                    let phoneStr = isOpened ? `<b>📞 Tel:</b> +${{o.phone}}` : `<b>📞 Tel:</b> +998****** (Yopiq)`;
+                    let btnHtml = isOpened ? '<p style="color:green; font-weight:bold; margin-top:6px;">✅ Raqam ochilgan</p>' : `<button type="button" class="buy-btn" onclick="buyOrder('${{o.id}}')">🔓 Raqamni ochish (3,000 so'm)</button>`;
+
+                    html += `
+                        <div class="order-card">
+                            <div class="order-title">📍 ${{o.from_city}} ➡️ ${{o.to_city}}</div>
+                            <div class="order-info"><b>Turi:</b> ${{o.type}} (${{o.passengers}})</div>
+                            <div class="order-info"><b>Taklif narxi:</b> ${{o.price}} so'm</div>
+                            <div class="order-info"><b>Ismi:</b> ${{o.name}}</div>
+                            <div class="order-info">${{phoneStr}}</div>
+                            <div class="order-info"><b>Izoh:</b> ${{o.comment}}</div>
+                            ${{btnHtml}}
+                        </div>
+                    `;
+                }});
+                listEl.innerHTML = html;
+            }} catch(e) {{
+                listEl.innerHTML = '<p style="text-align: center; color: red;">Xatolik yuz berdi.</p>';
+            }}
+        }}
+
+        function buyOrder(orderId) {{
+            let driverData = JSON.parse(localStorage.getItem('safar_driver'));
+            if (driverData.balance < 3000) {{
+                alert("⚠️ Balansizgizda yetarli pul yo'q! Iltimos, Balans bo'limidan to'ldiring.");
+                switchTab(4);
+                return;
+            }}
+
+            if (confirm("Ushbu yo'lovchi raqamini ochish uchun balansingizdan 3,000 so'm yechilsinmi?")) {{
+                driverData.balance -= 3000;
+                localStorage.setItem('safar_driver', JSON.stringify(driverData));
+                
+                openedOrders.push(orderId);
+                localStorage.setItem('opened_orders', JSON.stringify(openedOrders));
+
+                document.getElementById('p_balance').innerText = driverData.balance;
+                document.getElementById('b_balance').innerText = driverData.balance;
+
+                alert("✅ Raqam ochildi!");
+                loadOrders();
+            }}
         }}
 
         function switchTab(tabNum) {{
@@ -510,7 +631,10 @@ async def handle_driver_app(request):
 
             if(tabNum === 1) document.getElementById('tab1').classList.add('active');
             if(tabNum === 2) document.getElementById('tab2').classList.add('active');
-            if(tabNum === 3) document.getElementById('tab3').classList.add('active');
+            if(tabNum === 3) {{
+                document.getElementById('tab3').classList.add('active');
+                loadOrders();
+            }}
             if(tabNum === 4) document.getElementById('tab4').classList.add('active');
 
             document.querySelectorAll('.nav-item')[tabNum - 1].classList.add('active');
@@ -519,6 +643,7 @@ async def handle_driver_app(request):
         function clearData() {{
             if (confirm("Ma'lumotlarni o'chirib, qayta ro'yxatdan o'tasizmi?")) {{
                 localStorage.removeItem('safar_driver');
+                localStorage.removeItem('opened_orders');
                 location.reload();
             }}
         }}
@@ -529,7 +654,7 @@ async def handle_driver_app(request):
             localStorage.setItem('safar_driver', JSON.stringify(data));
             document.getElementById('p_balance').innerText = data.balance;
             document.getElementById('b_balance').innerText = data.balance;
-            alert("Balans to'ldirildi!");
+            alert("✅ Balans muvaffaqiyatli to'ldirildi!");
         }}
     </script>
 </body>
@@ -544,6 +669,7 @@ async def web_server():
     app = web.Application()
     app.router.add_get("/", handle_home)
     app.router.add_get("/driver-app", handle_driver_app)
+    app.router.add_get("/api/orders", handle_get_orders)
 
     runner = web.AppRunner(app)
     await runner.setup()
