@@ -457,7 +457,7 @@ async def handle_driver_app(request):
     mode_2 = "📦 Faqat dastafka (yuk)" if lang == "uz" else "📦 Только доставка (груз)"
     mode_3 = "🚖 + 📦 Yo'lovchi va Dastafka (Ikkalasi birga)" if lang == "uz" else "🚖 + 📦 Пассажир и Доставка (Вместе)"
 
-    html_content = """<!DOCTYPE html>
+    html_content = f"""<!DOCTYPE html>
 <html lang="uz">
 <head>
     <meta charset="UTF-8">
@@ -465,16 +465,16 @@ async def handle_driver_app(request):
     <title>Haydovchi Anketasi</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        body {
+        body {{
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background-color: var(--tg-theme-bg-color, #f4f4f9);
             color: var(--tg-theme-text-color, #222);
             margin: 0; padding-bottom: 70px;
-        }
-        .tab-content { display: none; padding: 16px; }
-        .tab-content.active { display: block !important; }
+        }}
+        .tab-content {{ display: none; padding: 16px; }}
+        .tab-content.active {{ display: block !important; }}
         
-        .nav-bar {
+        .nav-bar {{
             position: fixed; bottom: 0; left: 0; width: 100%;
             background: var(--tg-theme-secondary-bg-color, #fff);
             display: flex; justify-content: space-around;
@@ -482,51 +482,51 @@ async def handle_driver_app(request):
             box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
             box-sizing: border-box;
             z-index: 999;
-        }
-        .nav-item {
+        }}
+        .nav-item {{
             text-align: center; font-size: 11px; cursor: pointer;
             color: var(--tg-theme-hint-color, #777); font-weight: 600;
-        }
-        .nav-item.active { color: var(--tg-theme-button-color, #0088cc); }
-        .nav-item div { font-size: 20px; margin-bottom: 2px; }
+        }}
+        .nav-item.active {{ color: var(--tg-theme-button-color, #0088cc); }}
+        .nav-item div {{ font-size: 20px; margin-bottom: 2px; }}
 
-        .card {
+        .card {{
             background: var(--tg-theme-secondary-bg-color, #ffffff);
             padding: 16px; border-radius: 14px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 14px;
-        }
-        h2 { color: var(--tg-theme-button-color, #0088cc); text-align: center; margin-top: 0; }
-        label { font-size: 13px; font-weight: 600; display: block; margin-top: 10px; margin-bottom: 4px; }
-        input, select {
+        }}
+        h2 {{ color: var(--tg-theme-button-color, #0088cc); text-align: center; margin-top: 0; }}
+        label {{ font-size: 13px; font-weight: 600; display: block; margin-top: 10px; margin-bottom: 4px; }}
+        input, select {{
             width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px;
             font-size: 14px; box-sizing: border-box; background: var(--tg-theme-bg-color, #fafafa);
             color: var(--tg-theme-text-color, #222);
-        }
-        button {
+        }}
+        button {{
             width: 100%; background-color: var(--tg-theme-button-color, #0088cc);
             color: var(--tg-theme-button-text-color, #fff); border: none;
             padding: 12px; border-radius: 10px; font-size: 15px; font-weight: bold;
             cursor: pointer; margin-top: 16px;
-        }
-        .reset-btn {
+        }}
+        .reset-btn {{
             background-color: #e74c3c !important;
             margin-top: 20px;
-        }
-        .profile-img { width: 90px; height: 90px; border-radius: 50%; object-fit: cover; display: block; margin: 0 auto 12px auto; border: 2px solid #0088cc; }
-        .car-big-img { width: 100%; height: 180px; border-radius: 10px; object-fit: cover; margin-top: 12px; display: block; }
-        .status-msg { font-size: 12px; color: green; display: none; margin-top: 4px; font-weight: bold; }
+        }}
+        .profile-img {{ width: 90px; height: 90px; border-radius: 50%; object-fit: cover; display: block; margin: 0 auto 12px auto; border: 2px solid #0088cc; }}
+        .car-big-img {{ width: 100%; height: 180px; border-radius: 10px; object-fit: cover; margin-top: 12px; display: block; }}
+        .status-msg {{ font-size: 12px; color: green; display: none; margin-top: 4px; font-weight: bold; }}
 
-        .order-card {
+        .order-card {{
             border-left: 4px solid #0088cc; padding: 12px;
             margin-bottom: 12px; background: rgba(0,136,204,0.05);
             border-radius: 0 10px 10px 0;
-        }
-        .order-title { font-weight: bold; font-size: 15px; margin-bottom: 6px; }
-        .order-info { font-size: 13px; color: #555; margin-bottom: 4px; }
-        .buy-btn {
+        }}
+        .order-title {{ font-weight: bold; font-size: 15px; margin-bottom: 6px; }}
+        .order-info {{ font-size: 13px; color: #555; margin-bottom: 4px; }}
+        .buy-btn {{
             background-color: #27ae60; padding: 8px; font-size: 13px;
             margin-top: 8px;
-        }
+        }}
     </style>
 </head>
 <body>
@@ -589,10 +589,10 @@ async def handle_driver_app(request):
                 <h2>⚙️ Yo'nalish va Sozlamalar</h2>
                 <form id="settingsForm">
                     <label>Jo'nash shahri:</label>
-                    <select id="set_from">""" + options_html + """</select>
+                    <select id="set_from">{options_html}</select>
 
                     <label>Boradigan shahar:</label>
-                    <select id="set_to">""" + options_html + """</select>
+                    <select id="set_to">{options_html}</select>
 
                     <label>Odamlar soni (Maksimal):</label>
                     <select id="set_passengers">
@@ -604,9 +604,9 @@ async def handle_driver_app(request):
 
                     <label>Ish tartibi:</label>
                     <select id="set_work_mode">
-                        <option value='""" + mode_1 + """'>""" + mode_1 + """</option>
-                        <option value='""" + mode_2 + """'>""" + mode_2 + """</option>
-                        <option value='""" + mode_3 + """' selected>""" + mode_3 + """</option>
+                        <option value="{mode_1}">{mode_1}</option>
+                        <option value="{mode_2}">{mode_2}</option>
+                        <option value="{mode_3}" selected>{mode_3}</option>
                     </select>
 
                     <label>1 odam uchun narx (eng kam so'mda):</label>
@@ -664,55 +664,55 @@ async def handle_driver_app(request):
 
     <script>
         let tg = window.Telegram.WebApp;
-        try { tg.expand(); } catch(err) {}
+        try {{ tg.expand(); }} catch(err) {{}}
 
         let openedOrders = [];
-        try {
+        try {{
             openedOrders = JSON.parse(localStorage.getItem('opened_orders')) || [];
-        } catch(e) { openedOrders = []; }
+        }} catch(e) {{ openedOrders = []; }}
 
-        function initApp() {
+        function initApp() {{
             let driverData = localStorage.getItem('safar_driver');
-            if (driverData) {
-                try {
+            if (driverData) {{
+                try {{
                     let parsed = JSON.parse(driverData);
-                    if (parsed && parsed.name) {
+                    if (parsed && parsed.name) {{
                         showDashboard(parsed);
                         return;
-                    }
-                } catch(e) {}
-            }
+                    }}
+                }} catch(e) {{}}
+            }}
             document.getElementById('registerScreen').style.display = 'block';
             document.getElementById('registerScreen').classList.add('active');
             document.getElementById('dashboardApp').style.display = 'none';
-        }
+        }}
 
         initApp();
 
-        function processFile(inputId, hiddenId, statusId) {
+        function processFile(inputId, hiddenId, statusId) {{
             let fileInput = document.getElementById(inputId);
             let file = fileInput.files[0];
             if (!file) return;
 
             let reader = new FileReader();
-            reader.onload = function(e) {
+            reader.onload = function(e) {{
                 document.getElementById(hiddenId).value = e.target.result;
                 document.getElementById(statusId).style.display = 'block';
-            };
+            }};
             reader.readAsDataURL(file);
-        }
+        }}
 
-        document.getElementById('regForm').addEventListener('submit', function(e) {
+        document.getElementById('regForm').addEventListener('submit', function(e) {{
             e.preventDefault();
             let pPhoto = document.getElementById('reg_profile_photo').value;
             let cPhoto1 = document.getElementById('reg_car_photo1').value;
 
-            if (!pPhoto || !cPhoto1) {
+            if (!pPhoto || !cPhoto1) {{
                 alert("Iltimos, ikkala rasmni ham tanlang!");
                 return;
-            }
+            }}
 
-            let data = {
+            let data = {{
                 name: document.getElementById('reg_name').value,
                 profile_photo: pPhoto,
                 phone: document.getElementById('reg_phone').value,
@@ -726,14 +726,14 @@ async def handle_driver_app(request):
                 min_price: 50000,
                 min_delivery_price: 30000,
                 balance: 15000
-            };
+            }};
 
             localStorage.setItem('safar_driver', JSON.stringify(data));
-            try { tg.sendData(JSON.stringify(data)); } catch(err) {}
+            try {{ tg.sendData(JSON.stringify(data)); }} catch(err) {{}}
             showDashboard(data);
-        });
+        }});
 
-        document.getElementById('settingsForm').addEventListener('submit', function(e) {
+        document.getElementById('settingsForm').addEventListener('submit', function(e) {{
             e.preventDefault();
             let data = JSON.parse(localStorage.getItem('safar_driver'));
             if(!data) return;
@@ -741,4 +741,153 @@ async def handle_driver_app(request):
             data.from_city = document.getElementById('set_from').value;
             data.to_city = document.getElementById('set_to').value;
             data.passengers_count = document.getElementById('set_passengers').value;
-            data.work_mode = document.getElementById('
+            data.work_mode = document.getElementById('set_work_mode').value;
+            data.min_price = document.getElementById('set_min_price').value;
+            data.min_delivery_price = document.getElementById('set_min_delivery_price').value;
+
+            localStorage.setItem('safar_driver', JSON.stringify(data));
+            try {{ tg.sendData(JSON.stringify(data)); }} catch(err) {{}}
+            alert("Saqlandi!");
+            loadOrders();
+        }});
+
+        function showDashboard(data) {{
+            document.getElementById('registerScreen').style.display = 'none';
+            document.getElementById('registerScreen').classList.remove('active');
+            document.getElementById('dashboardApp').style.display = 'block';
+
+            document.getElementById('p_img').src = data.profile_photo || '';
+            document.getElementById('p_name').innerText = data.name || '';
+            document.getElementById('p_phone').innerText = data.phone || '';
+            document.getElementById('p_car').innerText = data.car_model || '';
+            document.getElementById('p_plate').innerText = data.car_plate || '';
+            document.getElementById('p_balance').innerText = data.balance || 0;
+            document.getElementById('b_balance').innerText = data.balance || 0;
+            document.getElementById('p_car1').src = data.car_photo1 || '';
+
+            document.getElementById('set_from').value = data.from_city || "Toshkent";
+            document.getElementById('set_to').value = data.to_city || "Buxoro";
+            document.getElementById('set_passengers').value = data.passengers_count || 4;
+            document.getElementById('set_work_mode').value = data.work_mode || "🚖 + 📦 Yo'lovchi va Dastafka (Ikkalasi birga)";
+            document.getElementById('set_min_price').value = data.min_price || 50000;
+            document.getElementById('set_min_delivery_price').value = data.min_delivery_price || 30000;
+
+            switchTab(1);
+        }}
+
+        async function loadOrders() {{
+            let listEl = document.getElementById('ordersList');
+            try {{
+                let res = await fetch('/api/orders');
+                let orders = await res.json();
+                
+                if(!orders || orders.length === 0) {{
+                    listEl.innerHTML = '<p style="text-align: center; color: #777;">Hozircha buyurtmalar yo\'q.</p>';
+                    return;
+                }}
+
+                let html = '';
+                orders.forEach(o => {{
+                    let isOpened = openedOrders.includes(o.id);
+                    let phoneStr = isOpened ? '<b>📞 Tel:</b> +' + o.phone : '<b>📞 Tel:</b> +998****** (Yopiq)';
+                    let btnHtml = isOpened ? '<p style="color:green; font-weight:bold; margin-top:6px;">✅ Raqam ochilgan</p>' : '<button type="button" class="buy-btn" onclick="buyOrder(\'' + o.id + '\')">🔓 Raqamni ochish (3,000 so\'m)</button>';
+
+                    html += '<div class="order-card">' +
+                            '<div class="order-title">📍 ' + o.from_city + ' ➡️ ' + o.to_city + '</div>' +
+                            '<div class="order-info"><b>Turi:</b> ' + o.type + ' (' + o.passengers + ')</div>' +
+                            '<div class="order-info"><b>Taklif narxi:</b> ' + o.price + ' so\'m</div>' +
+                            '<div class="order-info"><b>Ismi:</b> ' + o.name + '</div>' +
+                            '<div class="order-info">' + phoneStr + '</div>' +
+                            '<div class="order-info"><b>Izoh:</b> ' + o.comment + '</div>' +
+                            btnHtml +
+                            '</div>';
+                }});
+                listEl.innerHTML = html;
+            }} catch(e) {{
+                listEl.innerHTML = '<p style="text-align: center; color: red;">Xatolik yuz berdi.</p>';
+            }}
+        }}
+
+        function buyOrder(orderId) {{
+            let driverData = JSON.parse(localStorage.getItem('safar_driver'));
+            if (!driverData || driverData.balance < 3000) {{
+                alert("⚠️ Balansizgizda yetarli pul yo'q! Iltimos, Balans bo'limidan to'ldiring.");
+                switchTab(4);
+                return;
+            }}
+
+            if (confirm("Ushbu buyurtma raqamini ochish uchun balansingizdan 3,000 so'm yechilsinmi?")) {{
+                driverData.balance -= 3000;
+                localStorage.setItem('safar_driver', JSON.stringify(driverData));
+                
+                openedOrders.push(orderId);
+                localStorage.setItem('opened_orders', JSON.stringify(openedOrders));
+
+                document.getElementById('p_balance').innerText = driverData.balance;
+                document.getElementById('b_balance').innerText = driverData.balance;
+
+                alert("✅ Raqam ochildi!");
+                loadOrders();
+            }}
+        }}
+
+        function switchTab(tabNum) {{
+            document.querySelectorAll('#dashboardApp .tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+
+            if(tabNum === 1) document.getElementById('tab1').classList.add('active');
+            if(tabNum === 2) document.getElementById('tab2').classList.add('active');
+            if(tabNum === 3) {{
+                document.getElementById('tab3').classList.add('active');
+                loadOrders();
+            }}
+            if(tabNum === 4) document.getElementById('tab4').classList.add('active');
+
+            document.querySelectorAll('.nav-item')[tabNum - 1].classList.add('active');
+        }}
+
+        function clearData() {{
+            if (confirm("Ma'lumotlarni o'chirib, qayta ro'yxatdan o'tasizmi?")) {{
+                localStorage.removeItem('safar_driver');
+                localStorage.removeItem('opened_orders');
+                location.reload();
+            }}
+        }}
+
+        function topUp(amount) {{
+            let data = JSON.parse(localStorage.getItem('safar_driver'));
+            if(!data) return;
+            data.balance += amount;
+            localStorage.setItem('safar_driver', JSON.stringify(data));
+            document.getElementById('p_balance').innerText = data.balance;
+            document.getElementById('b_balance').innerText = data.balance;
+            alert("✅ Balans muvaffaqiyatli to'ldirildi!");
+        }}
+    </script>
+</body>
+</html>
+"""
+    return web.Response(text=html_content, content_type='text/html')
+
+async def handle_home(request):
+    return web.Response(text="Safar Taxi Bot ishlamoqda!")
+
+async def web_server():
+    app = web.Application()
+    app.router.add_get("/", handle_home)
+    app.router.add_get("/driver-app", handle_driver_app)
+    app.router.add_get("/api/orders", handle_get_orders)
+
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.environ.get("PORT", 10000))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+
+async def main():
+    logging.basicConfig(level=logging.INFO)
+    print("Bot va Mini App ishga tushdi...")
+    await asyncio.gather(web_server(), dp.start_polling(bot))
+
+if __name__ == "__main__":
+    asyncio.run(main())
