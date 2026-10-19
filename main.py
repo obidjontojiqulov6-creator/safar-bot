@@ -20,7 +20,7 @@ ALL_USERS = set()
 DAILY_VISITS = set()
 LAST_VISIT_DATE = datetime.now().date()
 
-ADMIN_ID = 123456789  # O'zingizning Telegram ID raqamingizni kiriting
+ADMIN_ID = 123456789  # O'zingizning Telegram ID raqamingiz
 
 class BookingState(StatesGroup):
     waiting_for_lang = State()
@@ -151,20 +151,20 @@ async def select_role(message: types.Message, state: FSMContext):
     elif text in ["🚖 Haydovchi kabineti", "🚖 Кабинет водителя"]:
         driver_id = message.from_user.id
         render_url = os.getenv("RENDER_EXTERNAL_URL", "")
-        webapp_url = f"{render_url}/driver-form?lang={lang}&user_id={driver_id}"
+        webapp_url = f"{render_url}/driver-app?lang={lang}&user_id={driver_id}"
         
         inline_builder = InlineKeyboardBuilder()
         inline_builder.button(
-            text="📝 Anketani to'ldirish (Mini App)" if lang == "uz" else "📝 Заполнить анкету (Mini App)",
+            text="📱 Haydovchi Mini App ochish" if lang == "uz" else "📱 Открыть Mini App водителя",
             web_app=types.WebAppInfo(url=webapp_url)
         )
         
         intro_text = (
             "🚖 **Haydovchi kabineti**\n\n"
-            "Ro'yxatdan o'tish va buyurtmalarni ko'rish uchun pastdagi tugmani bosing va anketani to'ldiring:"
+            "Boshqaruv paneli va anketaga kirish uchun pastdagi tugmani bosing:"
             if lang == "uz" else
             "🚖 **Кабинет водителя**\n\n"
-            "Для регистрации нажмите на кнопку ниже и заполните анкету:"
+            "Нажмите на кнопку ниже, чтобы открыть панель управления и анкету:"
         )
         return await message.answer(intro_text, reply_markup=inline_builder.as_markup(), parse_mode="Markdown")
 
@@ -180,18 +180,27 @@ async def handle_web_app_data(message: types.Message):
         
         DRIVERS[driver_id] = {
             "name": data.get("name"),
+            "profile_photo": data.get("profile_photo"),
             "phone": data.get("phone"),
-            "car": data.get("car"),
-            "current_city": data.get("from_city"),
-            "target_city": data.get("to_city"),
+            "car_model": data.get("car_model"),
+            "car_plate": data.get("car_plate"),
+            "car_photo1": data.get("car_photo1"),
+            "car_photo2": data.get("car_photo2"),
+            "from_city": data.get("from_city"),
+            "to_city": data.get("to_city"),
+            "passengers_count": data.get("passengers_count", 4),
+            "delivery": data.get("delivery", "Yo'q"),
+            "min_price": data.get("min_price", 0),
+            "max_price": data.get("max_price", 0),
+            "balance": data.get("balance", 10000),
             "lang": data.get("lang", "uz")
         }
 
         lang = data.get("lang", "uz")
-        msg = "✅ Anketangiz qabul qilindi! Haydovchi sifatida ro'yxatdan o'tdingiz." if lang == "uz" else "✅ Ваши данные приняты! Вы зарегистрированы как водитель."
+        msg = "✅ Ma'lumotlaringiz muvaffaqiyatli saqlandi!" if lang == "uz" else "✅ Ваши данные успешно сохранены!"
         await message.answer(msg)
     except Exception:
-        await message.answer("❌ Ma'lumotlarni saqlashda xatolik yuz berdi.")
+        await message.answer("❌ Xatolik yuz berdi.")
 
 # --- YO'LOVCHI SO'ROVNOMASI ---
 @dp.message(BookingState.waiting_for_from_city)
@@ -201,8 +210,7 @@ async def select_from_city(message: types.Message, state: FSMContext):
     cities = CITIES_UZ if lang == "uz" else CITIES_RU
     
     if message.text not in cities:
-        err_city = "Iltimos, tugmalardagi hududlardan birini tanlang." if lang == "uz" else "Пожалуйста, выберите один из регионов на кнопках."
-        return await message.answer(err_city)
+        return await message.answer("Iltimos, tugmalardagi hududlardan birini tanlang.")
 
     await state.update_data(from_city=message.text)
     await state.set_state(BookingState.waiting_for_to_city)
@@ -230,12 +238,10 @@ async def select_to_city(message: types.Message, state: FSMContext):
             if city != data.get("from_city"):
                 builder.button(text=city)
         builder.adjust(2, 2, 2, 2, 2, 2)
-        back_text = "📍 Qayerdan jo'naysiz?" if lang == "uz" else "📍 Откуда выезжаете?"
-        return await message.answer(back_text, reply_markup=builder.as_markup(resize_keyboard=True))
+        return await message.answer("📍 Qayerdan jo'naysiz?", reply_markup=builder.as_markup(resize_keyboard=True))
 
     if message.text not in cities:
-        err_city2 = "Iltimos, ro'yxatdagi hududlardan birini tanlang." if lang == "uz" else "Пожалуйста, выберите регион из списка."
-        return await message.answer(err_city2)
+        return await message.answer("Iltimos, ro'yxatdagi hududlardan birini tanlang.")
 
     await state.update_data(to_city=message.text, passengers=[])
     await state.set_state(BookingState.waiting_for_passengers)
@@ -272,7 +278,7 @@ async def handle_passengers(message: types.Message, state: FSMContext):
 
     if text in ["🔙 Orqaga", "🔙 Назад"]:
         await state.set_state(BookingState.waiting_for_to_city)
-        return await message.answer("🏁 Qayerga borasiz?" if lang == "uz" else "🏁 Куда едем?")
+        return await message.answer("🏁 Qayerga borasiz?")
 
     if text in ["🔄 Tozalash", "🔄 Очистить"]:
         passengers = []
@@ -281,20 +287,17 @@ async def handle_passengers(message: types.Message, state: FSMContext):
 
     if text in ["➡️ Keyingi bo'lim", "➡️ Следующий раздел"]:
         if not passengers:
-            no_pass = "Iltimos, kamida 1 ta yo'lovchini tanlang!" if lang == "uz" else "Пожалуйста, выберите хотя бы 1 пассажира!"
-            return await message.answer(no_pass)
+            return await message.answer("Iltimos, kamida 1 ta yo'lovchini tanlang!")
         
         await state.set_state(BookingState.waiting_for_price)
         builder = ReplyKeyboardBuilder()
         builder.button(text="🔙 Orqaga" if lang == "uz" else "🔙 Назад")
         builder.adjust(1)
-        price_prompt = "💵 Yo'lkira uchun bermoqchi bo'lgan summangizni kiriting:" if lang == "uz" else "💵 Введите сумму, которую хотите предложить за проезд:"
-        return await message.answer(price_prompt, reply_markup=builder.as_markup(resize_keyboard=True), parse_mode="Markdown")
+        return await message.answer("💵 Yo'lkira uchun bermoqchi bo'lgan summangizni kiriting:", reply_markup=builder.as_markup(resize_keyboard=True), parse_mode="Markdown")
 
     if text in ["👨 Erkak", "👨 Мужчина", "👩 Ayol", "👩 Женщина"]:
         if len(passengers) >= 4:
-            warn = "⚠️ Maksimal 4 ta yo'lovchi tanlash mumkin!" if lang == "uz" else "⚠️ Максимум 4 пассажира!"
-            return await message.answer(warn)
+            return await message.answer("⚠️ Maksimal 4 ta yo'lovchi tanlash mumkin!")
         emoji = "👨" if "Erkak" in text or "Мужчина" in text else "👩"
         passengers.append(emoji)
         await state.update_data(passengers=passengers)
@@ -317,10 +320,8 @@ async def enter_price(message: types.Message, state: FSMContext):
     builder.button(text="🔙 Orqaga" if lang == "uz" else "🔙 Назад")
     builder.adjust(1, 1)
 
-    contact_prompt = "📞 Iltimos, aloqa uchun telefon raqamingizni yuboring:" if lang == "uz" else "📞 Пожалуйста, отправьте ваш номер телефона для связи:"
-    await message.answer(contact_prompt, reply_markup=builder.as_markup(resize_keyboard=True), parse_mode="Markdown")
+    await message.answer("📞 Iltimos, aloqa uchun telefon raqamingizni yuboring:", reply_markup=builder.as_markup(resize_keyboard=True), parse_mode="Markdown")
 
-# 1. KONTAKT KELGANDA -> LOKATSIYA SO'RAYMIZ
 @dp.message(BookingState.waiting_for_contact, F.contact)
 async def get_contact(message: types.Message, state: FSMContext):
     data = await state.get_data()
@@ -334,8 +335,7 @@ async def get_contact(message: types.Message, state: FSMContext):
     builder.button(text="🔙 Orqaga" if lang == "uz" else "🔙 Назад")
     builder.adjust(1, 1)
 
-    loc_prompt = "📍 Iltimos, turgan joyingizni **jonli lokatsiya** orqali yuboring:" if lang == "uz" else "📍 Пожалуйста, отправьте ваше местоположение через **живую локацию**:"
-    await message.answer(loc_prompt, reply_markup=builder.as_markup(resize_keyboard=True), parse_mode="Markdown")
+    await message.answer("📍 Iltimos, turgan joyingizni **jonli lokatsiya** orqali yuboring:", reply_markup=builder.as_markup(resize_keyboard=True), parse_mode="Markdown")
 
 @dp.message(BookingState.waiting_for_contact)
 async def wrong_contact(message: types.Message, state: FSMContext):
@@ -343,11 +343,9 @@ async def wrong_contact(message: types.Message, state: FSMContext):
     lang = data.get("lang", "uz")
     if message.text in ["🔙 Orqaga", "🔙 Назад"]:
         await state.set_state(BookingState.waiting_for_price)
-        return await message.answer("💵 Summani qaytadan kiriting:" if lang == "uz" else "💵 Введите сумму заново:")
-    err_c = "⚠️ Iltimos, pastdagi 'Kontaktni yuborish' tugmasini bosing!" if lang == "uz" else "⚠️ Пожалуйста, нажмите кнопку 'Отправить контакт' ниже!"
-    await message.answer(err_c)
+        return await message.answer("💵 Summani qaytadan kiriting:")
+    await message.answer("⚠️ Iltimos, pastdagi 'Kontaktni yuborish' tugmasini bosing!")
 
-# 2. LOKATSIYA KELGANDA -> QOSHIMCHA MALUMOT (IZOH) SO'RAYMIZ
 @dp.message(BookingState.waiting_for_location, F.location)
 async def get_location(message: types.Message, state: FSMContext):
     data = await state.get_data()
@@ -363,12 +361,11 @@ async def get_location(message: types.Message, state: FSMContext):
     builder.button(text="🔙 Orqaga" if lang == "uz" else "🔙 Назад")
     builder.adjust(1, 1)
 
-    comment_prompt = (
-        "📝 Haydovchiga qo'shimcha ma'lumot (masalan: yukim bor, vaqtida tayyor bo'ling va h.k.) yozib qoldiring. Agar yo'q bo'lsa, **'O'tkazib yuborish'** tugmasini bosing:"
-        if lang == "uz" else
-        "📝 Оставьте дополнительную информацию для водителя (например: есть багаж, будьте вовремя и т.д.). Если нет, нажмите кнопку **'Пропустить'**:"
+    await message.answer(
+        "📝 Haydovchiga qo'shimcha ma'lumot yozib qoldiring. Agar yo'q bo'lsa, **'O'tkazib yuborish'** tugmasini bosing:",
+        reply_markup=builder.as_markup(resize_keyboard=True),
+        parse_mode="Markdown"
     )
-    await message.answer(comment_prompt, reply_markup=builder.as_markup(resize_keyboard=True), parse_mode="Markdown")
 
 @dp.message(BookingState.waiting_for_location)
 async def wrong_location(message: types.Message, state: FSMContext):
@@ -376,11 +373,9 @@ async def wrong_location(message: types.Message, state: FSMContext):
     lang = data.get("lang", "uz")
     if message.text in ["🔙 Orqaga", "🔙 Назад"]:
         await state.set_state(BookingState.waiting_for_contact)
-        return await message.answer("📞 Telefon raqamingizni qaytadan yuboring:" if lang == "uz" else "📞 Отправьте номер телефона заново:")
-    err_l = "⚠️ Iltimos, pastdagi 'Jonli lokatsiyani yuborish' tugmasi orqali lokatsiya yuboring!" if lang == "uz" else "⚠️ Пожалуйста, отправьте локацию через кнопку 'Отправить живую локацию' ниже!"
-    await message.answer(err_l)
+        return await message.answer("📞 Telefon raqamingizni qaytadan yuboring:")
+    await message.answer("⚠️ Iltimos, 'Jonli lokatsiyani yuborish' tugmasini bosing!")
 
-# 3. IZOH YOKI O'TKAZIB YUBORISH -> BUYURTMANI YAKUNLASH
 @dp.message(BookingState.waiting_for_comment)
 async def get_comment(message: types.Message, state: FSMContext):
     data = await state.get_data()
@@ -390,11 +385,10 @@ async def get_comment(message: types.Message, state: FSMContext):
     if text in ["🔙 Orqaga", "🔙 Назад"]:
         await state.set_state(BookingState.waiting_for_location)
         builder = ReplyKeyboardBuilder()
-        builder.button(text="📍 Jonli lokatsiyani yuborish" if lang == "uz" else "📍 Отправить живую локацию", request_location=True)
-        builder.button(text="🔙 Orqaga" if lang == "uz" else "🔙 Назад")
+        builder.button(text="📍 Jonli lokatsiyani yuborish", request_location=True)
+        builder.button(text="🔙 Orqaga")
         builder.adjust(1, 1)
-        back_loc = "📍 Lokatsiyani qaytadan yuboring:" if lang == "uz" else "📍 Отправьте локацию заново:"
-        return await message.answer(back_loc, reply_markup=builder.as_markup(resize_keyboard=True))
+        return await message.answer("📍 Lokatsiyani qaytadan yuboring:", reply_markup=builder.as_markup(resize_keyboard=True))
 
     comment = "" if text in ["⏭️ O'tkazib yuborish", "⏭️ Пропустить"] else text
     name = message.from_user.first_name
@@ -451,107 +445,314 @@ async def cancel_order_callback(callback: types.CallbackQuery, state: FSMContext
     if order_id in ORDERS:
         del ORDERS[order_id]
 
-    await callback.answer("Buyurtma bekor qilindi!" if callback.message.text and "Rahmat" in callback.message.text else "Заказ отменен!")
-    await callback.message.edit_text("❌ Buyurtma bekor qilindi." if "Rahmat" in callback.message.text or "Спасибо" in callback.message.text else "❌ Заказ отменен.")
+    await callback.answer("Buyurtma bekor qilindi!")
+    await callback.message.edit_text("❌ Buyurtma bekor qilindi.")
     await cmd_start(callback.message, state)
 
 @dp.message()
 async def echo_text(message: types.Message, state: FSMContext):
     await cmd_start(message, state)
 
-# --- WEB SERVER VA HAYDOVCHI MINI APP HTML KODI ---
-async def handle_driver_form(request):
+# ==========================================================
+# 4 BO'LIMLI MUKAMMAL HAYDOVCHI MINI APP (SERVER)
+# ==========================================================
+async def handle_driver_app(request):
     lang = request.query.get("lang", "uz")
+    user_id = request.query.get("user_id", "")
     cities = CITIES_UZ if lang == "uz" else CITIES_RU
-    
     options_html = "".join([f'<option value="{c}">{c}</option>' for c in cities])
-    title = "Haydovchi Anketasi" if lang == "uz" else "Анкета Водителя"
-    lbl_name = "Ism va Familiya:" if lang == "uz" else "Имя и Фамилия:"
-    ph_name = "Masalan: Sardor Rahimov" if lang == "uz" else "Например: Сардор Рахимов"
-    lbl_phone = "Telefon raqam:" if lang == "uz" else "Номер телефона:"
-    lbl_car = "Mashina rusumi va raqami:" if lang == "uz" else "Модель и номер машины:"
-    lbl_from = "Hozirgi shahar (Jo'nash):" if lang == "uz" else "Текущий город (Откуда):"
-    lbl_to = "Boradigan shahar:" if lang == "uz" else "Город назначения (Куда):"
-    btn_text = "Ro'yxatdan o'tish" if lang == "uz" else "Зарегистрироваться"
 
     html_content = f"""<!DOCTYPE html>
 <html lang="{lang}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{title}</title>
+    <title>Haydovchi Kabineti</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         body {{
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background-color: var(--tg-theme-bg-color, #f4f4f9);
             color: var(--tg-theme-text-color, #222);
-            margin: 0; padding: 20px;
+            margin: 0; padding-bottom: 70px;
         }}
+        .tab-content {{ display: none; padding: 16px; }}
+        .tab-content.active {{ display: block; }}
+        
+        /* Navigation Bar */
+        .nav-bar {{
+            position: fixed; bottom: 0; left: 0; width: 100%;
+            background: var(--tg-theme-secondary-bg-color, #fff);
+            display: flex; justify-content: space-around;
+            border-top: 1px solid #ddd; padding: 8px 0;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+            box-sizing: border-box;
+        }}
+        .nav-item {{
+            text-align: center; font-size: 11px; cursor: pointer;
+            color: var(--tg-theme-hint-color, #777); font-weight: 600;
+        }}
+        .nav-item.active {{ color: var(--tg-theme-button-color, #0088cc); }}
+        .nav-item div {{ font-size: 20px; margin-bottom: 2px; }}
+
+        /* Cards & Forms */
         .card {{
             background: var(--tg-theme-secondary-bg-color, #ffffff);
-            padding: 20px; border-radius: 16px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
-            max-width: 400px; margin: auto;
+            padding: 16px; border-radius: 14px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 14px;
         }}
-        h2 {{ text-align: center; color: var(--tg-theme-button-color, #0088cc); margin-bottom: 20px; }}
-        label {{ font-size: 14px; font-weight: 600; display: block; margin-top: 12px; margin-bottom: 4px; }}
+        h2 {{ color: var(--tg-theme-button-color, #0088cc); text-align: center; margin-top: 0; }}
+        label {{ font-size: 13px; font-weight: 600; display: block; margin-top: 10px; margin-bottom: 4px; }}
         input, select {{
-            width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px;
-            font-size: 15px; box-sizing: border-box; background: #fafafa;
+            width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px;
+            font-size: 14px; box-sizing: border-box; background: var(--tg-theme-bg-color, #fafafa);
+            color: var(--tg-theme-text-color, #222);
         }}
         button {{
             width: 100%; background-color: var(--tg-theme-button-color, #0088cc);
             color: var(--tg-theme-button-text-color, #fff); border: none;
-            padding: 14px; border-radius: 10px; font-size: 16px; font-weight: bold;
-            cursor: pointer; margin-top: 24px;
+            padding: 12px; border-radius: 10px; font-size: 15px; font-weight: bold;
+            cursor: pointer; margin-top: 16px;
         }}
+        .profile-img {{ width: 80px; height: 80px; border-radius: 50%; object-fit: cover; display: block; margin: 0 auto 10px auto; }}
+        .car-photos {{ display: flex; gap: 10px; margin-top: 10px; }}
+        .car-photos img {{ width: 50%; height: 90px; border-radius: 8px; object-fit: cover; }}
+        .order-box {{ border-left: 4px solid #0088cc; padding: 10px; margin-bottom: 10px; background: rgba(0,136,204,0.05); border-radius: 0 8px 8px 0; }}
     </style>
 </head>
 <body>
-    <div class="card">
-        <h2>🚖 {title}</h2>
-        <form id="driverForm">
-            <label>{lbl_name}</label>
-            <input type="text" id="name" required placeholder="{ph_name}">
 
-            <label>{lbl_phone}</label>
-            <input type="tel" id="phone" required placeholder="+998901234567">
+    <!-- 1. RO'YXATDAN O'TISH SAHIFASI (Agar oldin o'tmagan bo'lsa) -->
+    <div id="registerScreen" class="tab-content active">
+        <div class="card">
+            <h2>🚖 {"Haydovchi Anketasi" if lang=="uz" else "Анкета Водителя"}</h2>
+            <form id="regForm">
+                <label>{"Ism va Familiya:" if lang=="uz" else "Имя и Фамилия:"}</label>
+                <input type="text" id="reg_name" required placeholder="Sardor Rahimov">
 
-            <label>{lbl_car}</label>
-            <input type="text" id="car" required placeholder="Gentra 01 A 777 AA">
+                <label>{"Profil rasmi (URL):" if lang=="uz" else "Фото профиля (URL):"}</label>
+                <input type="url" id="reg_profile_photo" required placeholder="https://example.com/photo.jpg">
 
-            <label>{lbl_from}</label>
-            <select id="from_city">
-                {options_html}
-            </select>
+                <label>{"Telefon raqam:" if lang=="uz" else "Номер телефона:"}</label>
+                <input type="tel" id="reg_phone" required placeholder="+998901234567">
 
-            <label>{lbl_to}</label>
-            <select id="to_city">
-                {options_html}
-            </select>
+                <label>{"Avtomobil rusumi va rangi:" if lang=="uz" else "Модель и цвет машины:"}</label>
+                <input type="text" id="reg_car_model" required placeholder="Gentra (Oq)">
 
-            <button type="submit">{btn_text}</button>
-        </form>
+                <label>{"Avtomobil davlat raqami:" if lang=="uz" else "Гос. номер машины:"}</label>
+                <input type="text" id="reg_car_plate" required placeholder="01 A 777 AA">
+
+                <label>{"Mashina old tomoni rasmi (URL):" if lang=="uz" else "Фото машины спереди (URL):"}</label>
+                <input type="url" id="reg_car_photo1" required placeholder="https://example.com/car1.jpg">
+
+                <label>{"Mashina orqa tomoni rasmi (URL):" if lang=="uz" else "Фото машины сзади (URL):"}</label>
+                <input type="url" id="reg_car_photo2" required placeholder="https://example.com/car2.jpg">
+
+                <label>{"Hozirgi shahar (Jo'nash):" if lang=="uz" else "Текущий город (Откуда):"}</label>
+                <select id="reg_from">{options_html}</select>
+
+                <label>{"Boradigan shahar:" if lang=="uz" else "Город назначения (Куда):"}</label>
+                <select id="reg_to">{options_html}</select>
+
+                <button type="submit">{"Ro'yxatdan o'tish" if lang=="uz" else "Зарегистрироваться"}</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- 2. ASOSIY 4 TA BO'LIMLI DASHBOARD -->
+    <div id="dashboardApp" style="display: none;">
+        
+        <!-- 1-BO'LIM: PROFIL -->
+        <div id="tab1" class="tab-content">
+            <div class="card">
+                <h2>👤 {"Mening Profilim" if lang=="uz" else "Мой Профиль"}</h2>
+                <img id="p_img" class="profile-img" src="" alt="Profil">
+                <p><b>👤 {"Ism": if lang=="uz" else "Имя"}:</b> <span id="p_name"></span></p>
+                <p><b>📞 {"Tel": if lang=="uz" else "Тел"}:</b> <span id="p_phone"></span></p>
+                <p><b>🚗 {"Mashina": if lang=="uz" else "Машина"}:</b> <span id="p_car"></span> (<span id="p_plate"></span>)</p>
+                <p><b>💳 {"Balans": if lang=="uz" else "Баланс"}:</b> <span id="p_balance"></span> so'm</p>
+                <label>{"Mashina rasmlari:" if lang=="uz" else "Фото машины:"}</label>
+                <div class="car-photos">
+                    <img id="p_car1" src="" alt="Car 1">
+                    <img id="p_car2" src="" alt="Car 2">
+                </div>
+            </div>
+        </div>
+
+        <!-- 2-BO'LIM: YO'NALISH VA SOZLAMALAR -->
+        <div id="tab2" class="tab-content">
+            <div class="card">
+                <h2>⚙️ {"Yo'nalish va Sozlamalar" if lang=="uz" else "Маршрут и Настройки"}</h2>
+                <form id="settingsForm">
+                    <label>{"Jo'nash shahri:" if lang=="uz" else "Город отправления:"}</label>
+                    <select id="set_from">{options_html}</select>
+
+                    <label>{"Boradigan shahar:" if lang=="uz" else "Город назначения:"}</label>
+                    <select id="set_to">{options_html}</select>
+
+                    <label>{"Odamlar soni (Maksimal):" if lang=="uz" else "Количество пассажиров (Макс):"}</label>
+                    <select id="set_passengers">
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4" selected>4</option>
+                    </select>
+
+                    <label>{"Dastavka (Pochta/Yuk) olish:" if lang=="uz" else "Доставка (Посылка/Груз):"}</label>
+                    <select id="set_delivery">
+                        <option value="Ha">{"Ha" if lang=="uz" else "Да"}</option>
+                        <option value="Yo'q" selected>{"Yo'q" if lang=="uz" else "Нет"}</option>
+                    </select>
+
+                    <label>{"1 odam uchun Minimal narx (so'm):" if lang=="uz" else "Минимальная цена за 1 чел (сум):"}</label>
+                    <input type="number" id="set_min_price" value="50000">
+
+                    <label>{"1 odam uchun Maksimal narx (so'm):" if lang=="uz" else "Максимальная цена за 1 чел (сум):"}</label>
+                    <input type="number" id="set_max_price" value="150000">
+
+                    <button type="submit">{"Saqlash" if lang=="uz" else "Сохранить"}</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- 3-BO'LIM: YO'LOVCHILAR -->
+        <div id="tab3" class="tab-content">
+            <div class="card">
+                <h2>👥 {"Mos keluvchi Yo'lovchilar" if lang=="uz" else "Подходящие Пассажиры"}</h2>
+                <div id="ordersList">
+                    <p style="text-align: center; color: #777;">{"Hozircha buyurtmalar yo'q." if lang=="uz" else "Пока нет заказов."}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4-BO'LIM: BALANS -->
+        <div id="tab4" class="tab-content">
+            <div class="card">
+                <h2>💳 {"Balansni to'ldirish" if lang=="uz" else "Пополнение баланса"}</h2>
+                <p>{"Joriy balansingiz:" if lang=="uz" else "Ваш текущий баланс:"} <b id="b_balance" style="color: green;">0</b> so'm</p>
+                <label>{"To'ldirish summasini tanlang:" if lang=="uz" else "Выберите сумму пополнения:"}</label>
+                <div style="display: flex; gap: 10px; margin-top: 10px;">
+                    <button type="button" onclick="topUp(10000)">+ 10,000 uzs</button>
+                    <button type="button" onclick="topUp(25000)">+ 25,000 uzs</button>
+                    <button type="button" onclick="topUp(50000)">+ 50,000 uzs</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- PASTKI 4 TA TUGMA (NAVBAR) -->
+        <div class="nav-bar">
+            <div class="nav-item active" onclick="switchTab(1)">
+                <div>👤</div>{"Profil" if lang=="uz" else "Профиль"}
+            </div>
+            <div class="nav-item" onclick="switchTab(2)">
+                <div>⚙️</div>{"Yo'nalish" if lang=="uz" else "Маршрут"}
+            </div>
+            <div class="nav-item" onclick="switchTab(3)">
+                <div>👥</div>{"Yo'lovchilar" if lang=="uz" else "Пассажиры"}
+            </div>
+            <div class="nav-item" onclick="switchTab(4)">
+                <div>💳</div>{"Balans" if lang=="uz" else "Баланс"}
+            </div>
+        </div>
+
     </div>
 
     <script>
         let tg = window.Telegram.WebApp;
         tg.expand();
 
-        document.getElementById('driverForm').addEventListener('submit', function(e) {{
+        let driverData = localStorage.getItem('safar_driver');
+
+        if (driverData) {{
+            showDashboard(JSON.parse(driverData));
+        }}
+
+        // Ro'yxatdan o'tish formasi
+        document.getElementById('regForm').addEventListener('submit', function(e) {{
             e.preventDefault();
             let data = {{
-                name: document.getElementById('name').value,
-                phone: document.getElementById('phone').value,
-                car: document.getElementById('car').value,
-                from_city: document.getElementById('from_city').value,
-                to_city: document.getElementById('to_city').value,
+                name: document.getElementById('reg_name').value,
+                profile_photo: document.getElementById('reg_profile_photo').value,
+                phone: document.getElementById('reg_phone').value,
+                car_model: document.getElementById('reg_car_model').value,
+                car_plate: document.getElementById('reg_car_plate').value,
+                car_photo1: document.getElementById('reg_car_photo1').value,
+                car_photo2: document.getElementById('reg_car_photo2').value,
+                from_city: document.getElementById('reg_from').value,
+                to_city: document.getElementById('reg_to').value,
+                passengers_count: 4,
+                delivery: "Yo'q",
+                min_price: 50000,
+                max_price: 150000,
+                balance: 15000,
                 lang: "{lang}"
             }};
+
+            localStorage.setItem('safar_driver', JSON.stringify(data));
             tg.sendData(JSON.stringify(data));
-            tg.close();
+            showDashboard(data);
         }});
+
+        // Sozlamalarni saqlash
+        document.getElementById('settingsForm').addEventListener('submit', function(e) {{
+            e.preventDefault();
+            let data = JSON.parse(localStorage.getItem('safar_driver'));
+            data.from_city = document.getElementById('set_from').value;
+            data.to_city = document.getElementById('set_to').value;
+            data.passengers_count = document.getElementById('set_passengers').value;
+            data.delivery = document.getElementById('set_delivery').value;
+            data.min_price = document.getElementById('set_min_price').value;
+            data.max_price = document.getElementById('set_max_price').value;
+
+            localStorage.setItem('safar_driver', JSON.stringify(data));
+            tg.sendData(JSON.stringify(data));
+            alert("✅ Sozlamalar saqlandi!");
+        }});
+
+        function showDashboard(data) {{
+            document.getElementById('registerScreen').style.display = 'none';
+            document.getElementById('dashboardApp').style.display = 'block';
+
+            // Profil ma'lumotlarini to'ldirish
+            document.getElementById('p_img').src = data.profile_photo;
+            document.getElementById('p_name').innerText = data.name;
+            document.getElementById('p_phone').innerText = data.phone;
+            document.getElementById('p_car').innerText = data.car_model;
+            document.getElementById('p_plate').innerText = data.car_plate;
+            document.getElementById('p_balance').innerText = data.balance;
+            document.getElementById('b_balance').innerText = data.balance;
+            document.getElementById('p_car1').src = data.car_photo1;
+            document.getElementById('p_car2').src = data.car_photo2;
+
+            // Sozlamalar selectlarini to'g'rilash
+            document.getElementById('set_from').value = data.from_city;
+            document.getElementById('set_to').value = data.to_city;
+            document.getElementById('set_passengers').value = data.passengers_count;
+            document.getElementById('set_delivery').value = data.delivery;
+            document.getElementById('set_min_price').value = data.min_price;
+            document.getElementById('set_max_price').value = data.max_price;
+        }}
+
+        function switchTab(tabNum) {{
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+
+            if(tabNum === 1) document.getElementById('tab1').classList.add('active');
+            if(tabNum === 2) document.getElementById('tab2').classList.add('active');
+            if(tabNum === 3) document.getElementById('tab3').classList.add('active');
+            if(tabNum === 4) document.getElementById('tab4').classList.add('active');
+
+            document.querySelectorAll('.nav-item')[tabNum - 1].classList.add('active');
+        }}
+
+        function topUp(amount) {{
+            let data = JSON.parse(localStorage.getItem('safar_driver'));
+            data.balance += amount;
+            localStorage.setItem('safar_driver', JSON.stringify(data));
+            document.getElementById('p_balance').innerText = data.balance;
+            document.getElementById('b_balance').innerText = data.balance;
+            alert("✅ Balans muvaffaqiyatli to'ldirildi!");
+        }}
     </script>
 </body>
 </html>
@@ -565,7 +766,7 @@ async def web_server():
     app = web.Application()
     app.add_routes([
         web.get("/", handle_home),
-        web.get("/driver-form", handle_driver_form)
+        web.get("/driver-app", handle_driver_app)
     ])
     runner = web.AppRunner(app)
     await runner.setup()
@@ -575,7 +776,7 @@ async def web_server():
 
 async def main():
     logging.basicConfig(level=logging.INFO)
-    print("Bot va Haydovchi Mini App serveri ishga tushdi...")
+    print("Bot va Mukammal Haydovchi Mini App ishga tushdi...")
     await asyncio.gather(web_server(), dp.start_polling(bot))
 
 if __name__ == "__main__":
