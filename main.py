@@ -2,6 +2,7 @@ import os
 import asyncio
 import logging
 import json
+import uuid
 from datetime import datetime
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
@@ -21,6 +22,10 @@ DAILY_VISITS = set()
 LAST_VISIT_DATE = datetime.now().date()
 
 ADMIN_ID = 123456789  # O'zingizning Telegram ID raqamingiz
+
+# Rasmlarni saqlash uchun papka ochamiz
+UPLOAD_DIR = "uploads"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 class BookingState(StatesGroup):
     waiting_for_lang = State()
@@ -186,13 +191,13 @@ async def handle_web_app_data(message: types.Message):
             "car_plate": data.get("car_plate"),
             "car_photo1": data.get("car_photo1"),
             "car_photo2": data.get("car_photo2"),
-            "from_city": data.get("from_city"),
-            "to_city": data.get("to_city"),
+            "from_city": data.get("from_city", "Toshkent"),
+            "to_city": data.get("to_city", "Buxoro"),
             "passengers_count": data.get("passengers_count", 4),
             "delivery": data.get("delivery", "Yo'q"),
-            "min_price": data.get("min_price", 0),
-            "max_price": data.get("max_price", 0),
-            "balance": data.get("balance", 10000),
+            "min_price": data.get("min_price", 50000),
+            "max_price": data.get("max_price", 150000),
+            "balance": data.get("balance", 15000),
             "lang": data.get("lang", "uz")
         }
 
@@ -454,6 +459,28 @@ async def echo_text(message: types.Message, state: FSMContext):
     await cmd_start(message, state)
 
 # ==========================================================
+# RASMLARNI YUKLAB OLISH UCHUN ENDPOINT
+# ==========================================================
+async def handle_upload(request):
+    reader = await request.multipart()
+    field = await reader.next()
+    if not field:
+        return web.json_response({"error": "No file uploaded"}, status=400)
+    
+    filename = f"{uuid.uuid4()}.jpg"
+    filepath = os.path.join(UPLOAD_DIR, filename)
+    
+    with open(filepath, "wb") as f:
+        while True:
+            chunk = await field.read_chunk()
+            if not chunk:
+                break
+            f.write(chunk)
+            
+    file_url = f"{request.scheme}://{request.host}/uploads/{filename}"
+    return web.json_response({"url": file_url})
+
+# ==========================================================
 # 4 BO'LIMLI MUKAMMAL HAYDOVCHI MINI APP (SERVER)
 # ==========================================================
 async def handle_driver_app(request):
@@ -461,18 +488,15 @@ async def handle_driver_app(request):
     cities = CITIES_UZ if lang == "uz" else CITIES_RU
     options_html = "".join([f'<option value="{c}">{c}</option>' for c in cities])
 
-    # Til bo'yicha matnlar
     if lang == "uz":
         t_reg = "Haydovchi Anketasi"
         l_name = "Ism va Familiya:"
-        l_photo = "Profil rasmi (URL):"
+        l_photo = "Profil rasmini tanlash:"
         l_phone = "Telefon raqam:"
         l_car = "Avtomobil rusumi va rangi:"
         l_plate = "Avtomobil davlat raqami:"
-        l_car1 = "Mashina old tomoni rasmi (URL):"
-        l_car2 = "Mashina orqa tomoni rasmi (URL):"
-        l_from = "Hozirgi shahar (Jo'nash):"
-        l_to = "Boradigan shahar:"
+        l_car1 = "Mashina oldi tomoni rasmini tanlash:"
+        l_car2 = "Mashina orqa tomoni rasmini tanlash:"
         btn_reg = "Ro'yxatdan o'tish"
         t_prof = "Mening Profilim"
         lbl_name = "Ism"
@@ -480,6 +504,8 @@ async def handle_driver_app(request):
         lbl_car_str = "Mashina"
         lbl_bal = "Balans"
         t_set = "Yo'nalish va Sozlamalar"
+        l_from = "Jo'nash shahri:"
+        l_to = "Boradigan shahar:"
         l_pass_cnt = "Odamlar soni (Maksimal):"
         l_deliv = "Dastavka (Pochta/Yuk) olish:"
         l_min_p = "1 odam uchun Minimal narx (so'm):"
@@ -499,14 +525,12 @@ async def handle_driver_app(request):
     else:
         t_reg = "Анкета Водителя"
         l_name = "Имя и Фамилия:"
-        l_photo = "Фото профиля (URL):"
+        l_photo = "Выберите фото профиля:"
         l_phone = "Номер телефона:"
         l_car = "Модель и цвет машины:"
         l_plate = "Гос. номер машины:"
-        l_car1 = "Фото машины спереди (URL):"
-        l_car2 = "Фото машины сзади (URL):"
-        l_from = "Текущий город (Откуда):"
-        l_to = "Город назначения (Куда):"
+        l_car1 = "Выберите фото машины спереди:"
+        l_car2 = "Выберите фото машины сзади:"
         btn_reg = "Зарегистрироваться"
         t_prof = "Мой Профиль"
         lbl_name = "Имя"
@@ -514,6 +538,8 @@ async def handle_driver_app(request):
         lbl_car_str = "Машина"
         lbl_bal = "Баланс"
         t_set = "Маршрут и Настройки"
+        l_from = "Город отправления:"
+        l_to = "Город назначения:"
         l_pass_cnt = "Количество пассажиров (Макс):"
         l_deliv = "Доставка (Посылка/Груз):"
         l_min_p = "Минимальная цена за 1 чел (сум):"
@@ -584,11 +610,12 @@ async def handle_driver_app(request):
         .profile-img {{ width: 80px; height: 80px; border-radius: 50%; object-fit: cover; display: block; margin: 0 auto 10px auto; }}
         .car-photos {{ display: flex; gap: 10px; margin-top: 10px; }}
         .car-photos img {{ width: 50%; height: 90px; border-radius: 8px; object-fit: cover; }}
+        .loading {{ text-align: center; font-size: 12px; color: #0088cc; display: none; margin-top: 4px; }}
     </style>
 </head>
 <body>
 
-    <!-- RO'YXATDAN O'TISH SAHIFASI -->
+    <!-- RO'YXATDAN O'TISH SAHIFASI (Faqat shaxsiy va mashina ma'lumotlari) -->
     <div id="registerScreen" class="tab-content active">
         <div class="card">
             <h2>🚖 {t_reg}</h2>
@@ -597,7 +624,9 @@ async def handle_driver_app(request):
                 <input type="text" id="reg_name" required placeholder="Sardor Rahimov">
 
                 <label>{l_photo}</label>
-                <input type="url" id="reg_profile_photo" required placeholder="https://example.com/photo.jpg">
+                <input type="file" id="file_profile" accept="image/*" required onchange="uploadImage('file_profile', 'reg_profile_photo')">
+                <input type="hidden" id="reg_profile_photo">
+                <div id="loading_file_profile" class="loading">Yuklanmoqda...</div>
 
                 <label>{l_phone}</label>
                 <input type="tel" id="reg_phone" required placeholder="+998901234567">
@@ -609,23 +638,21 @@ async def handle_driver_app(request):
                 <input type="text" id="reg_car_plate" required placeholder="01 A 777 AA">
 
                 <label>{l_car1}</label>
-                <input type="url" id="reg_car_photo1" required placeholder="https://example.com/car1.jpg">
+                <input type="file" id="file_car1" accept="image/*" required onchange="uploadImage('file_car1', 'reg_car_photo1')">
+                <input type="hidden" id="reg_car_photo1">
+                <div id="loading_file_car1" class="loading">Yuklanmoqda...</div>
 
                 <label>{l_car2}</label>
-                <input type="url" id="reg_car_photo2" required placeholder="https://example.com/car2.jpg">
+                <input type="file" id="file_car2" accept="image/*" required onchange="uploadImage('file_car2', 'reg_car_photo2')">
+                <input type="hidden" id="reg_car_photo2">
+                <div id="loading_file_car2" class="loading">Yuklanmoqda...</div>
 
-                <label>{l_from}</label>
-                <select id="reg_from">{options_html}</select>
-
-                <label>{l_to}</label>
-                <select id="reg_to">{options_html}</select>
-
-                <button type="submit">{btn_reg}</button>
+                <button type="submit" id="submitBtn">{btn_reg}</button>
             </form>
         </div>
     </div>
 
-    <!-- DASHBOARD -->
+    <!-- DASHBOARD (4 TA BO'LIM) -->
     <div id="dashboardApp" style="display: none;">
         
         <!-- 1-BO'LIM: PROFIL -->
@@ -644,7 +671,7 @@ async def handle_driver_app(request):
             </div>
         </div>
 
-        <!-- 2-BO'LIM: YO'NALISH -->
+        <!-- 2-BO'LIM: YO'NALISH VA SOZLAMALAR -->
         <div id="tab2" class="tab-content">
             <div class="card">
                 <h2>⚙️ {t_set}</h2>
@@ -732,18 +759,59 @@ async def handle_driver_app(request):
             showDashboard(JSON.parse(driverData));
         }}
 
+        // Rasm yuklash funksiyasi
+        async function uploadImage(inputId, hiddenId) {{
+            let fileInput = document.getElementById(inputId);
+            let loadingEl = document.getElementById('loading_' + inputId);
+            let file = fileInput.files[0];
+            if (!file) return;
+
+            let formData = new FormData();
+            formData.append('file', file);
+
+            loadingEl.style.display = 'block';
+
+            try {{
+                let response = await fetch('/upload', {{
+                    method: 'POST',
+                    body: formData
+                }});
+                let result = await response.json();
+                if (result.url) {{
+                    document.getElementById(hiddenId).value = result.url;
+                    loadingEl.innerText = "✅ Yuklandi!";
+                    loadingEl.style.color = "green";
+                }} else {{
+                    alert("Xatolik yuz berdi!");
+                    loadingEl.style.display = 'none';
+                }}
+            }} catch (err) {{
+                alert("Server bilan aloqa yo'q!");
+                loadingEl.style.display = 'none';
+            }}
+        }}
+
         document.getElementById('regForm').addEventListener('submit', function(e) {{
             e.preventDefault();
+            let pPhoto = document.getElementById('reg_profile_photo').value;
+            let cPhoto1 = document.getElementById('reg_car_photo1').value;
+            let cPhoto2 = document.getElementById('reg_car_photo2').value;
+
+            if (!pPhoto || !cPhoto1 || !cPhoto2) {{
+                alert("Iltimos, barcha rasmlar yuklanishini kuting!");
+                return;
+            }}
+
             let data = {{
                 name: document.getElementById('reg_name').value,
-                profile_photo: document.getElementById('reg_profile_photo').value,
+                profile_photo: pPhoto,
                 phone: document.getElementById('reg_phone').value,
                 car_model: document.getElementById('reg_car_model').value,
                 car_plate: document.getElementById('reg_car_plate').value,
-                car_photo1: document.getElementById('reg_car_photo1').value,
-                car_photo2: document.getElementById('reg_car_photo2').value,
-                from_city: document.getElementById('reg_from').value,
-                to_city: document.getElementById('reg_to').value,
+                car_photo1: cPhoto1,
+                car_photo2: cPhoto2,
+                from_city: "Toshkent",
+                to_city: "Buxoro",
                 passengers_count: 4,
                 delivery: "{yoq}",
                 min_price: 50000,
@@ -825,10 +893,12 @@ async def handle_home(request):
 
 async def web_server():
     app = web.Application()
-    app.add_routes([
-        web.get("/", handle_home),
-        web.get("/driver-app", handle_driver_app)
-    ])
+    app.app_key = {}
+    app.router.add_get("/", handle_home)
+    app.router.add_get("/driver-app", handle_driver_app)
+    app.router.add_post("/upload", handle_upload)
+    app.router.add_static("/uploads", UPLOAD_DIR)
+
     runner = web.AppRunner(app)
     await runner.setup()
     port = int(os.environ.get("PORT", 10000))
@@ -837,7 +907,7 @@ async def web_server():
 
 async def main():
     logging.basicConfig(level=logging.INFO)
-    print("Bot va Mukammal Haydovchi Mini App ishga tushdi...")
+    print("Bot va Haydovchi Mini App ishga tushdi...")
     await asyncio.gather(web_server(), dp.start_polling(bot))
 
 if __name__ == "__main__":
