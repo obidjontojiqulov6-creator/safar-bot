@@ -23,7 +23,6 @@ LAST_VISIT_DATE = datetime.now().date()
 
 ADMIN_ID = 123456789  # O'zingizning Telegram ID raqamingiz
 
-# Rasmlarni saqlash uchun papka ochamiz
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
@@ -50,7 +49,6 @@ CITIES_RU = [
     "Гулистан", "Термез", "Ургенч", "Нукус"
 ]
 
-# --- START BUYRUG'I ---
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
@@ -116,7 +114,6 @@ async def refresh_stats(message: types.Message):
 async def back_to_main(message: types.Message, state: FSMContext):
     await cmd_start(message, state)
 
-# --- TIL VA ROLNI TANLASH ---
 @dp.message(BookingState.waiting_for_lang, F.text.in_(["🇺🇿 O'zbekcha", "🇷🇺 Русский"]))
 async def select_language(message: types.Message, state: FSMContext):
     lang = "uz" if "O'zbekcha" in message.text else "ru"
@@ -182,32 +179,13 @@ async def handle_web_app_data(message: types.Message):
     try:
         data = json.loads(message.web_app_data.data)
         driver_id = message.from_user.id
-        
-        DRIVERS[driver_id] = {
-            "name": data.get("name"),
-            "profile_photo": data.get("profile_photo"),
-            "phone": data.get("phone"),
-            "car_model": data.get("car_model"),
-            "car_plate": data.get("car_plate"),
-            "car_photo1": data.get("car_photo1"),
-            "car_photo2": data.get("car_photo2"),
-            "from_city": data.get("from_city", "Toshkent"),
-            "to_city": data.get("to_city", "Buxoro"),
-            "passengers_count": data.get("passengers_count", 4),
-            "delivery": data.get("delivery", "Yo'q"),
-            "min_price": data.get("min_price", 50000),
-            "max_price": data.get("max_price", 150000),
-            "balance": data.get("balance", 15000),
-            "lang": data.get("lang", "uz")
-        }
-
+        DRIVERS[driver_id] = data
         lang = data.get("lang", "uz")
         msg = "✅ Ma'lumotlaringiz muvaffaqiyatli saqlandi!" if lang == "uz" else "✅ Ваши данные успешно сохранены!"
         await message.answer(msg)
     except Exception:
         await message.answer("❌ Xatolik yuz berdi.")
 
-# --- YO'LOVCHI SO'ROVNOMASI ---
 @dp.message(BookingState.waiting_for_from_city)
 async def select_from_city(message: types.Message, state: FSMContext):
     data = await state.get_data()
@@ -458,9 +436,6 @@ async def cancel_order_callback(callback: types.CallbackQuery, state: FSMContext
 async def echo_text(message: types.Message, state: FSMContext):
     await cmd_start(message, state)
 
-# ==========================================================
-# RASMLARNI YUKLAB OLISH UCHUN ENDPOINT
-# ==========================================================
 async def handle_upload(request):
     reader = await request.multipart()
     field = await reader.next()
@@ -480,9 +455,6 @@ async def handle_upload(request):
     file_url = f"{request.scheme}://{request.host}/uploads/{filename}"
     return web.json_response({"url": file_url})
 
-# ==========================================================
-# 4 BO'LIMLI MUKAMMAL HAYDOVCHI MINI APP (SERVER)
-# ==========================================================
 async def handle_driver_app(request):
     lang = request.query.get("lang", "uz")
     cities = CITIES_UZ if lang == "uz" else CITIES_RU
@@ -496,7 +468,6 @@ async def handle_driver_app(request):
         l_car = "Avtomobil rusumi va rangi:"
         l_plate = "Avtomobil davlat raqami:"
         l_car1 = "Mashina oldi tomoni rasmini tanlash:"
-        l_car2 = "Mashina orqa tomoni rasmini tanlash:"
         btn_reg = "Ro'yxatdan o'tish"
         t_prof = "Mening Profilim"
         lbl_name = "Ism"
@@ -507,7 +478,11 @@ async def handle_driver_app(request):
         l_from = "Jo'nash shahri:"
         l_to = "Boradigan shahar:"
         l_pass_cnt = "Odamlar soni (Maksimal):"
-        l_deliv = "Dastavka (Pochta/Yuk) olish:"
+        l_mode = "Ish tartibi (Dastavka / Yo'lovchi):"
+        mode_1 = "🚖 Faqat yo'lovchi"
+        mode_2 = "📦 Faqat dastafka (yuk)"
+        mode_3 = "📦 ➡️ 🚖 Avval dastafka, keyin yo'lovchi"
+        mode_4 = "🚖 ➡️ 📦 Avval yo'lovchi, keyin dastafka"
         l_min_p = "1 odam uchun Minimal narx (so'm):"
         l_max_p = "1 odam uchun Maksimal narx (so'm):"
         btn_save = "Saqlash"
@@ -520,8 +495,6 @@ async def handle_driver_app(request):
         nav2 = "Yo'nalish"
         nav3 = "Yo'lovchilar"
         nav4 = "Balans"
-        ha = "Ha"
-        yoq = "Yo'q"
     else:
         t_reg = "Анкета Водителя"
         l_name = "Имя и Фамилия:"
@@ -530,7 +503,6 @@ async def handle_driver_app(request):
         l_car = "Модель и цвет машины:"
         l_plate = "Гос. номер машины:"
         l_car1 = "Выберите фото машины спереди:"
-        l_car2 = "Выберите фото машины сзади:"
         btn_reg = "Зарегистрироваться"
         t_prof = "Мой Профиль"
         lbl_name = "Имя"
@@ -541,7 +513,11 @@ async def handle_driver_app(request):
         l_from = "Город отправления:"
         l_to = "Город назначения:"
         l_pass_cnt = "Количество пассажиров (Макс):"
-        l_deliv = "Доставка (Посылка/Груз):"
+        l_mode = "Режим работы (Доставка / Пассажир):"
+        mode_1 = "🚖 Только пассажир"
+        mode_2 = "📦 Только доставка (груз)"
+        mode_3 = "📦 ➡️ 🚖 Сначала доставка, потом пассажир"
+        mode_4 = "🚖 ➡️ 📦 Сначала пассажир, потом доставка"
         l_min_p = "Минимальная цена за 1 чел (сум):"
         l_max_p = "Максимальная цена за 1 чел (сум):"
         btn_save = "Сохранить"
@@ -554,8 +530,6 @@ async def handle_driver_app(request):
         nav2 = "Маршрут"
         nav3 = "Пассажиры"
         nav4 = "Баланс"
-        ha = "Да"
-        yoq = "Нет"
 
     html_content = f"""<!DOCTYPE html>
 <html lang="{lang}">
@@ -607,16 +581,15 @@ async def handle_driver_app(request):
             padding: 12px; border-radius: 10px; font-size: 15px; font-weight: bold;
             cursor: pointer; margin-top: 16px;
         }}
-        .profile-img {{ width: 80px; height: 80px; border-radius: 50%; object-fit: cover; display: block; margin: 0 auto 10px auto; }}
-        .car-photos {{ display: flex; gap: 10px; margin-top: 10px; }}
-        .car-photos img {{ width: 50%; height: 90px; border-radius: 8px; object-fit: cover; }}
+        .profile-img {{ width: 90px; height: 90px; border-radius: 50%; object-fit: cover; display: block; margin: 0 auto 12px auto; border: 2px solid #0088cc; }}
+        .car-big-img {{ width: 100%; height: 180px; border-radius: 10px; object-fit: cover; margin-top: 12px; display: block; }}
         .loading {{ text-align: center; font-size: 12px; color: #0088cc; display: none; margin-top: 4px; }}
     </style>
 </head>
 <body>
 
-    <!-- RO'YXATDAN O'TISH SAHIFASI (Faqat shaxsiy va mashina ma'lumotlari) -->
-    <div id="registerScreen" class="tab-content active">
+    <!-- RO'YXATDAN O'TISH SAHIFASI -->
+    <div id="registerScreen" class="tab-content">
         <div class="card">
             <h2>🚖 {t_reg}</h2>
             <form id="regForm">
@@ -642,17 +615,12 @@ async def handle_driver_app(request):
                 <input type="hidden" id="reg_car_photo1">
                 <div id="loading_file_car1" class="loading">Yuklanmoqda...</div>
 
-                <label>{l_car2}</label>
-                <input type="file" id="file_car2" accept="image/*" required onchange="uploadImage('file_car2', 'reg_car_photo2')">
-                <input type="hidden" id="reg_car_photo2">
-                <div id="loading_file_car2" class="loading">Yuklanmoqda...</div>
-
                 <button type="submit" id="submitBtn">{btn_reg}</button>
             </form>
         </div>
     </div>
 
-    <!-- DASHBOARD (4 TA BO'LIM) -->
+    <!-- DASHBOARD -->
     <div id="dashboardApp" style="display: none;">
         
         <!-- 1-BO'LIM: PROFIL -->
@@ -664,10 +632,9 @@ async def handle_driver_app(request):
                 <p><b>📞 {lbl_tel}:</b> <span id="p_phone"></span></p>
                 <p><b>🚗 {lbl_car_str}:</b> <span id="p_car"></span> (<span id="p_plate"></span>)</p>
                 <p><b>💳 {lbl_bal}:</b> <span id="p_balance"></span> so'm</p>
-                <div class="car-photos">
-                    <img id="p_car1" src="" alt="Car 1">
-                    <img id="p_car2" src="" alt="Car 2">
-                </div>
+                
+                <label><b>Mashina (Oldi ko'rinishi):</b></label>
+                <img id="p_car1" class="car-big-img" src="" alt="Mashina">
             </div>
         </div>
 
@@ -690,10 +657,12 @@ async def handle_driver_app(request):
                         <option value="4" selected>4</option>
                     </select>
 
-                    <label>{l_deliv}</label>
-                    <select id="set_delivery">
-                        <option value="{ha}">{ha}</option>
-                        <option value="{yoq}" selected>{yoq}</option>
+                    <label>{l_mode}</label>
+                    <select id="set_work_mode">
+                        <option value="{mode_1}">{mode_1}</option>
+                        <option value="{mode_2}">{mode_2}</option>
+                        <option value="{mode_3}">{mode_3}</option>
+                        <option value="{mode_4}">{mode_4}</option>
                     </select>
 
                     <label>{l_min_p}</label>
@@ -757,9 +726,10 @@ async def handle_driver_app(request):
 
         if (driverData) {{
             showDashboard(JSON.parse(driverData));
+        }} else {{
+            document.getElementById('registerScreen').classList.add('active');
         }}
 
-        // Rasm yuklash funksiyasi
         async function uploadImage(inputId, hiddenId) {{
             let fileInput = document.getElementById(inputId);
             let loadingEl = document.getElementById('loading_' + inputId);
@@ -795,9 +765,8 @@ async def handle_driver_app(request):
             e.preventDefault();
             let pPhoto = document.getElementById('reg_profile_photo').value;
             let cPhoto1 = document.getElementById('reg_car_photo1').value;
-            let cPhoto2 = document.getElementById('reg_car_photo2').value;
 
-            if (!pPhoto || !cPhoto1 || !cPhoto2) {{
+            if (!pPhoto || !cPhoto1) {{
                 alert("Iltimos, barcha rasmlar yuklanishini kuting!");
                 return;
             }}
@@ -809,11 +778,10 @@ async def handle_driver_app(request):
                 car_model: document.getElementById('reg_car_model').value,
                 car_plate: document.getElementById('reg_car_plate').value,
                 car_photo1: cPhoto1,
-                car_photo2: cPhoto2,
                 from_city: "Toshkent",
                 to_city: "Buxoro",
                 passengers_count: 4,
-                delivery: "{yoq}",
+                work_mode: "{mode_1}",
                 min_price: 50000,
                 max_price: 150000,
                 balance: 15000,
@@ -831,7 +799,7 @@ async def handle_driver_app(request):
             data.from_city = document.getElementById('set_from').value;
             data.to_city = document.getElementById('set_to').value;
             data.passengers_count = document.getElementById('set_passengers').value;
-            data.delivery = document.getElementById('set_delivery').value;
+            data.work_mode = document.getElementById('set_work_mode').value;
             data.min_price = document.getElementById('set_min_price').value;
             data.max_price = document.getElementById('set_max_price').value;
 
@@ -852,12 +820,11 @@ async def handle_driver_app(request):
             document.getElementById('p_balance').innerText = data.balance;
             document.getElementById('b_balance').innerText = data.balance;
             document.getElementById('p_car1').src = data.car_photo1;
-            document.getElementById('p_car2').src = data.car_photo2;
 
             document.getElementById('set_from').value = data.from_city;
             document.getElementById('set_to').value = data.to_city;
             document.getElementById('set_passengers').value = data.passengers_count;
-            document.getElementById('set_delivery').value = data.delivery;
+            document.getElementById('set_work_mode').value = data.work_mode || "{mode_1}";
             document.getElementById('set_min_price').value = data.min_price;
             document.getElementById('set_max_price').value = data.max_price;
         }}
@@ -893,7 +860,6 @@ async def handle_home(request):
 
 async def web_server():
     app = web.Application()
-    app.app_key = {}
     app.router.add_get("/", handle_home)
     app.router.add_get("/driver-app", handle_driver_app)
     app.router.add_post("/upload", handle_upload)
