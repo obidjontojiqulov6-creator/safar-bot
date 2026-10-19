@@ -1,193 +1,326 @@
+import os
 import asyncio
 import logging
-import os
-from threading import Thread
-from flask import Flask
-
+from datetime import datetime
 from aiogram import Bot, Dispatcher, types, F
-from aiogram.filters import CommandStart
-from aiogram.types import (
-    ReplyKeyboardMarkup,
-    KeyboardButton,
-    InlineKeyboardMarkup,
-    InlineKeyboardButton,
-    WebAppInfo
-)
+from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.utils.keyboard import ReplyKeyboardBuilder, InlineKeyboardBuilder
+from aiohttp import web
 
-# ==========================================
-# 1. Render Port Muammosini Hal Qiluvchi Flask Server
-# ==========================================
-app = Flask(__name__)
-
-@app.route('/')
-def home():
-    return "Safar Bot status: Active and Running!"
-
-def run_web():
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
-
-def keep_alive():
-    t = Thread(target=run_web)
-    t.daemon = True
-    t.start()
-
-# ==========================================
-# 2. Telegram Bot Sozlamalari
-# ==========================================
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "YOUR_TELEGRAM_BOT_TOKEN_HERE")
-MINI_APP_URL = os.environ.get("MINI_APP_URL", "https://telegram.org")
-
-logging.basicConfig(level=logging.INFO)
-
-bot = Bot(token=BOT_TOKEN)
+TOKEN = os.getenv("BOT_TOKEN", "YOUR_TELEGRAM_BOT_TOKEN_HERE")
+bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# ==========================================
-# 3. Klaviaturalar (Keyboards)
-# ==========================================
+ORDERS = {}       
+ALL_USERS = set()
+DAILY_VISITS = set()
+LAST_VISIT_DATE = datetime.now().date()
 
-# 1. Tilni tanlash
-lang_keyboard = ReplyKeyboardMarkup(
-    keyboard=[
-        [KeyboardButton(text="🇺🇿 O'zbekcha"), KeyboardButton(text="🇷🇺 Русский")]
-    ],
-    resize_keyboard=True
-)
+ADMIN_ID = 123456789  # O'z admin ID raqamingizni yozing
 
-# 2. Asosiy rol menyusi
-role_keyboard = ReplyKeyboardMarkup(
-    keyboard=[
-        [KeyboardButton(text="👤 Yo'lovchi"), KeyboardButton(text="🚖 Haydovchi kabineti")]
-    ],
-    resize_keyboard=True
-)
+class BookingState(StatesGroup):
+    waiting_for_lang = State()
+    waiting_for_from_city = State()
+    waiting_for_to_city = State()
+    waiting_for_passengers = State()
+    waiting_for_price = State()
+    waiting_for_contact = State()
 
-# 3. Yo'lovchi menyusi
-passenger_keyboard = ReplyKeyboardMarkup(
-    keyboard=[
-        [KeyboardButton(text="🚖 Taksi chaqirish"), KeyboardButton(text="📍 Lokatsiyamni yuborish", request_location=True)],
-        [KeyboardButton(text="💰 Tariflar"), KeyboardButton(text="📞 Qo'llab-quvvatlash")],
-        [KeyboardButton(text="🔙 Asosiy menyuga qaytish")]
-    ],
-    resize_keyboard=True
-)
+CITIES = [
+    "Toshkent", "Andijon", "Buxoro", "Jizzax", 
+    "Navoiy", "Namangan", "Qarshi", "Samarqand", 
+    "Guliston", "Termiz", "Urganch", "Nukus"
+]
 
-# 4. Haydovchi uchun Inline Mini App va menyu
-driver_inline_kb = InlineKeyboardMarkup(
-    inline_keyboard=[
-        [
-            InlineKeyboardButton(
-                text="📱 Haydovchi Mini App ochish",
-                web_app=WebAppInfo(url=MINI_APP_URL)
-            )
-        ]
-    ]
-)
+@dp.message(Command("start"))
+async def cmd_start(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    ALL_USERS.add(user_id)
+    
+    global DAILY_VISITS, LAST_VISIT_DATE
+    current_date = datetime.now().date()
+    if current_date != LAST_VISIT_DATE:
+        DAILY_VISITS.clear()
+        LAST_VISIT_DATE = current_date
+    DAILY_VISITS.add(user_id)
 
-driver_keyboard = ReplyKeyboardMarkup(
-    keyboard=[
-        [KeyboardButton(text="📱 Mini App ochish")],
-        [KeyboardButton(text="📋 Shartlar"), KeyboardButton(text="📞 Operator bilan bog'lanish")],
-        [KeyboardButton(text="🔙 Asosiy menyuga qaytish")]
-    ],
-    resize_keyboard=True
-)
-
-# ==========================================
-# 4. Xabarlar va Buyruqlar (Handlers)
-# ==========================================
-
-# /start buyrug'i
-@dp.message(CommandStart())
-async def start_handler(message: types.Message):
-    welcome_text = (
-        "🇷🇺 Здравствуйте! Добро пожаловать в службу такси Safar. Пожалуйста, выберите язык:\n\n"
-        "🇺🇿 Assalomu alaykum! Safar taksi xizmatiga xush kelibsiz. Iltimos, tilni tanlang:"
-    )
-    await message.answer(welcome_text, reply_markup=lang_keyboard)
-
-# Til tanlanganda
-@dp.message(F.text.in_(["🇺🇿 O'zbekcha", "🇷🇺 Русский"]))
-async def select_language(message: types.Message):
-    if message.text == "🇺🇿 O'zbekcha":
-        text = "Siz kimsiz? Iltimos, o'z rolingizni tanlang:"
+    await state.clear()
+    await state.set_state(BookingState.waiting_for_lang)
+    
+    builder = ReplyKeyboardBuilder()
+    builder.button(text="🇺🇿 O'zbekcha")
+    builder.button(text="🇷🇺 Русский")
+    
+    if user_id == ADMIN_ID:
+        builder.button(text="👑 Admin paneli")
+        builder.adjust(2, 1)
     else:
-        text = "Кто вы? Пожалуйста, выберите свою роль:"
+        builder.adjust(2)
+    
+    welcome_text = (
+        "🇺🇿 Assalomu alaykum! Safar taksi xizmatiga xush kelibsiz. Iltimos, tilni tanlang:\n\n"
+        "🇷🇺 Здравствуйте! Добро пожаловать в службу такси Safar. Пожалуйста, выберите язык:"
+    )
+    
+    await message.answer(welcome_text, reply_markup=builder.as_markup(resize_keyboard=True))
+
+@dp.message(F.text == "👑 Admin paneli")
+async def admin_panel(message: types.Message):
+    if message.from_user.id != ADMIN_ID:
+        return await message.answer("Sizda bu bo'limga kirish huquqi yo'q.")
+    
+    total_users = len(ALL_USERS)
+    today_active = len(DAILY_VISITS)
+    total_orders = len(ORDERS)
+
+    text = (
+        f"👑 **Admin paneli**\n\n"
+        f"👥 Jami foydalanuvchilar: **{total_users} ta**\n"
+        f"📅 Bugun kirganlar: **{today_active} ta**\n"
+        f"📋 Faol buyurtmalar: **{total_orders} ta**"
+    )
+    
+    builder = ReplyKeyboardBuilder()
+    builder.button(text="🔄 Statistikani yangilash")
+    builder.button(text="🏠 Asosiy menyu")
+    builder.adjust(1, 1)
+    
+    await message.answer(text, reply_markup=builder.as_markup(resize_keyboard=True), parse_mode="Markdown")
+
+@dp.message(F.text == "🔄 Statistikani yangilash")
+async def refresh_stats(message: types.Message):
+    await admin_panel(message)
+
+@dp.message(F.text.in_(["🏠 Asosiy menyu", "🏠 Главное меню"]))
+async def back_to_main(message: types.Message, state: FSMContext):
+    await cmd_start(message, state)
+
+# --- TILNI TANLASH VA BUYURTMANi BOSHLASH ---
+@dp.message(BookingState.waiting_for_lang, F.text.in_(["🇺🇿 O'zbekcha", "🇷🇺 Русский"]))
+async def select_language(message: types.Message, state: FSMContext):
+    lang = "uz" if "O'zbekcha" in message.text else "ru"
+    await state.update_data(lang=lang)
+    await state.set_state(BookingState.waiting_for_from_city)
+
+    builder = ReplyKeyboardBuilder()
+    for city in CITIES:
+        builder.button(text=city)
+    builder.adjust(2, 2, 2, 2, 2, 2, 1)
+
+    city_text = "📍 Qayerdan jo'naysiz? Hududni tanlang:" if lang == "uz" else "📍 Откуда выезжаете? Выберите регион:"
+    await message.answer(city_text, reply_markup=builder.as_markup(resize_keyboard=True))
+
+# --- YO'LOVCHI QISMI (SHAHARLAR VA SO'ROVNOMA) ---
+@dp.message(BookingState.waiting_for_from_city)
+async def select_from_city(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    lang = data.get("lang", "uz")
+    
+    if message.text not in CITIES:
+        return await message.answer("Iltimos, tugmalardagi hududlardan birini tanlang.")
+
+    await state.update_data(from_city=message.text)
+    await state.set_state(BookingState.waiting_for_to_city)
+
+    builder = ReplyKeyboardBuilder()
+    for city in CITIES:
+        if city != message.text:
+            builder.button(text=city)
+    builder.button(text="🔙 Orqaga" if lang == "uz" else "🔙 Назад")
+    builder.adjust(2, 2, 2, 2, 2, 2, 1)
+
+    text = f"🏁 Qayerga borasiz? (Jo'nash: {message.text})" if lang == "uz" else f"🏁 Куда едем? (Откуда: {message.text})"
+    await message.answer(text, reply_markup=builder.as_markup(resize_keyboard=True))
+
+@dp.message(BookingState.waiting_for_to_city)
+async def select_to_city(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    lang = data.get("lang", "uz")
+
+    if message.text in ["🔙 Orqaga", "🔙 Назад"]:
+        await state.set_state(BookingState.waiting_for_from_city)
+        builder = ReplyKeyboardBuilder()
+        for city in CITIES:
+            if city != data.get("from_city"):
+                builder.button(text=city)
+        builder.adjust(2, 2, 2, 2, 2, 2, 1)
+        return await message.answer("📍 Qayerdan jo'naysiz?", reply_markup=builder.as_markup(resize_keyboard=True))
+
+    if message.text not in CITIES:
+        return await message.answer("Iltimos, ro'yxatdagi hududlardan birini tanlang.")
+
+    await state.update_data(to_city=message.text, passengers=[])
+    await state.set_state(BookingState.waiting_for_passengers)
+    await show_passenger_menu(message, [], lang)
+
+async def show_passenger_menu(message: types.Message, passengers: list, lang: str):
+    builder = ReplyKeyboardBuilder()
+    if lang == "uz":
+        builder.button(text="👨 Erkak")
+        builder.button(text="👩 Ayol")
+        builder.button(text="🔄 Tozalash")
+        builder.button(text="➡️ Keyingi bo'lim")
+        builder.button(text="🔙 Orqaga")
+        pass_str = " ".join(passengers) if passengers else "(Hali tanlanmadi)"
+        text = f"👥 Yo'lovchilar tarkibini tanlang:\nJoriy: {pass_str}"
+    else:
+        builder.button(text="👨 Мужчина")
+        builder.button(text="👩 Женщина")
+        builder.button(text="🔄 Очистить")
+        builder.button(text="➡️ Следующий раздел")
+        builder.button(text="🔙 Назад")
+        pass_str = " ".join(passengers) if passengers else "(Еще не выбрано)"
+        text = f"👥 Выберите состав пассажиров:\nТекущие: {pass_str}"
         
-    await message.answer(text, reply_markup=role_keyboard)
+    builder.adjust(2, 2, 1)
+    await message.answer(text, reply_markup=builder.as_markup(resize_keyboard=True))
 
-# Yo'lovchi bo'limi
-@dp.message(F.text == "👤 Yo'lovchi")
-async def passenger_cabinet(message: types.Message):
-    text = (
-        "👤 **Yo'lovchi bo'limi**\n\n"
-        "Kerakli xizmatni tanlang yoki geolokatsiyangizni yuboring:"
-    )
-    await message.answer(text, reply_markup=passenger_keyboard, parse_mode="Markdown")
+@dp.message(BookingState.waiting_for_passengers)
+async def handle_passengers(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    lang = data.get("lang", "uz")
+    passengers = data.get("passengers", [])
+    text = message.text
 
-# Yo'lovchi: Taksi chaqirish
-@dp.message(F.text == "🚖 Taksi chaqirish")
-async def order_taxi(message: types.Message):
-    await message.answer(
-        "Taksi buyurtma qilish uchun pastdagi **📍 Lokatsiyamni yuborish** tugmasini bosing yoki manzilingizni yozib yuboring:",
-        parse_mode="Markdown"
-    )
+    if text in ["🔙 Orqaga", "🔙 Назад"]:
+        await state.set_state(BookingState.waiting_for_to_city)
+        return await message.answer("🏁 Qayerga borasiz?")
 
-# Yo'lovchi: Lokatsiya kelganda
-@dp.message(F.location)
-async def handle_location(message: types.Message):
-    lat = message.location.latitude
-    lon = message.location.longitude
-    await message.answer(
-        f"📍 Joylashuvingiz qabul qilindi!\n\n"
-        f"Yaqin atrofdagi haydovchilar qidirilmoqda...",
-        reply_markup=passenger_keyboard
-    )
+    if text in ["🔄 Tozalash", "🔄 Очистить"]:
+        passengers = []
+        await state.update_data(passengers=passengers)
+        return await show_passenger_menu(message, passengers, lang)
 
-# Yo'lovchi: Tariflar
-@dp.message(F.text == "💰 Tariflar")
-async def show_tariffs(message: types.Message):
-    tariffs_text = (
-        "💰 **Safar Taksi Tariflari:**\n\n"
-        "🚘 **Ekonim:** Boshlang'ich 5,000 so'm (1 km = 1,800 so'm)\n"
-        "Comfort:** Boshlang'ich 8,000 so'm (1 km = 2,500 so'm)\n"
-        "🚚 **Yuk tashish:** Boshlang'ich 25,000 so'm"
-    )
-    await message.answer(tariffs_text, parse_mode="Markdown")
+    if text in ["➡️ Keyingi bo'lim", "➡️ Следующий раздел"]:
+        if not passengers:
+            return await message.answer("Iltimos, kamida 1 ta yo'lovchini tanlang!")
+        
+        await state.set_state(BookingState.waiting_for_price)
+        builder = ReplyKeyboardBuilder()
+        builder.button(text="🔙 Orqaga" if lang == "uz" else "🔙 Назад")
+        builder.adjust(1)
+        return await message.answer("💵 Yo'lkira uchun bermoqchi bo'lgan summangizni kiriting:", reply_markup=builder.as_markup(resize_keyboard=True), parse_mode="Markdown")
 
-# Haydovchi bo'limi
-@dp.message(F.text == "🚖 Haydovchi kabineti")
-async def driver_cabinet(message: types.Message):
-    text = (
-        "🚖 **Haydovchi kabineti (Mini App)**\n\n"
-        "Ro'yxatdan o'tish, buyurtmalarni ko'rish va anketa to'ldirish uchun pastdagi tugmani bosing:"
-    )
-    await message.answer(text, reply_markup=driver_inline_kb)
-    await message.answer("Qo'shimcha imkoniyatlar:", reply_markup=driver_keyboard)
+    if text in ["👨 Erkak", "👨 Мужчина", "👩 Ayol", "👩 Женщина"]:
+        if len(passengers) >= 4:
+            return await message.answer("Maksimal 4 ta yo'lovchi!")
+        emoji = "👨" if "Erkak" in text or "Мужчина" in text else "👩"
+        passengers.append(emoji)
+        await state.update_data(passengers=passengers)
+        return await show_passenger_menu(message, passengers, lang)
 
-# Asosiy menyuga qaytish
-@dp.message(F.text == "🔙 Asosiy menyuga qaytish")
-async def back_to_main(message: types.Message):
-    await message.answer("Asosiy menyuga qaytdingiz. Rolni tanlang:", reply_markup=role_keyboard)
+@dp.message(BookingState.waiting_for_price)
+async def enter_price(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    lang = data.get("lang", "uz")
 
-# Qo'llab-quvvatlash / Operator
-@dp.message(F.text.in_(["📞 Qo'llab-quvvatlash", "📞 Operator bilan bog'lanish"]))
-async def support_handler(message: types.Message):
-    await message.answer("📞 Bizning aloqa markazimiz: +998 (90) 123-45-67\nYoki admin: @safar_support")
+    if message.text in ["🔙 Orqaga", "🔙 Назад"]:
+        await state.set_state(BookingState.waiting_for_passengers)
+        return await show_passenger_menu(message, data.get("passengers", []), lang)
 
-# Boshqa matnli xabarlar
+    await state.update_data(price=message.text)
+    await state.set_state(BookingState.waiting_for_contact)
+
+    builder = ReplyKeyboardBuilder()
+    builder.button(text="📱 Kontaktni yuborish" if lang == "uz" else "📱 Отправить контакт", request_contact=True)
+    builder.button(text="🔙 Orqaga" if lang == "uz" else "🔙 Назад")
+    builder.adjust(1, 1)
+
+    await message.answer("📞 Iltimos, aloqa uchun pastdagi tugmani bosing:", reply_markup=builder.as_markup(resize_keyboard=True), parse_mode="Markdown")
+
+@dp.message(BookingState.waiting_for_contact, F.contact)
+async def get_contact(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    lang = data.get("lang", "uz")
+
+    phone = message.contact.phone_number
+    name = message.from_user.first_name
+    pass_summary = " ".join(data.get('passengers', []))
+
+    order_id = str(len(ORDERS) + 1)
+    ORDERS[order_id] = {
+        "user_id": message.from_user.id,
+        "name": name,
+        "from_city": data.get('from_city'),
+        "to_city": data.get('to_city'),
+        "passengers": pass_summary,
+        "price": data.get('price'),
+        "phone": phone
+    }
+
+    if lang == "uz":
+        response_text = (
+            f"Rahmat, {name}! Buyurtmangiz qabul qilindi ✅\n\n"
+            f"📋 **Buyurtma tafsilotlari:**\n"
+            f"📍 Qayerdan: {data.get('from_city')}\n"
+            f"🏁 Qayerga: {data.get('to_city')}\n"
+            f"👥 Odamlar: {pass_summary}\n"
+            f"💵 Narx: {data.get('price')}\n"
+            f"📞 Tel raqam: `+{phone}`"
+        )
+        canc_btn = "❌ Buyurtmani bekor qilish"
+    else:
+        response_text = (
+            f"Спасибо, {name}! Ваш заказ принят ✅\n\n"
+            f"📋 **Детали заказа:**\n"
+            f"📍 Откуда: {data.get('from_city')}\n"
+            f"🏁 Куда: {data.get('to_city')}\n"
+            f"👥 Пассажиры: {pass_summary}\n"
+            f"💵 Цена: {data.get('price')}\n"
+            f"📞 Телефон: `+{phone}`"
+        )
+        canc_btn = "❌ Отменить заказ"
+
+    inline_builder = InlineKeyboardBuilder()
+    inline_builder.button(text=canc_btn, callback_data=f"cancel_order_{order_id}")
+
+    await message.answer(response_text, reply_markup=inline_builder.as_markup(), parse_mode="Markdown")
+    await state.clear()
+
+@dp.callback_query(F.data.startswith("cancel_order_"))
+async def cancel_order_callback(callback: types.CallbackQuery, state: FSMContext):
+    order_id = callback.data.split("_")[2]
+    if order_id in ORDERS:
+        del ORDERS[order_id]
+
+    await callback.answer("Buyurtma bekor qilindi!")
+    await callback.message.edit_text("❌ Buyurtma bekor qilindi.")
+    await cmd_start(callback.message, state)
+
+@dp.message(BookingState.waiting_for_contact)
+async def wrong_contact(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    lang = data.get("lang", "uz")
+    if message.text in ["🔙 Orqaga", "🔙 Назад"]:
+        await state.set_state(BookingState.waiting_for_price)
+        return await message.answer("💵 Summani qaytadan kiriting:" if lang == "uz" else "💵 Введите сумму заново:")
+    
+    err_c = "⚠️ Iltimos, faqat pastdagi 'Kontaktni yuborish' tugmasini bosing!" if lang == "uz" else "⚠️ Пожалуйста, нажмите кнопку 'Отправить контакт' ниже!"
+    await message.answer(err_c)
+
 @dp.message()
-async def default_handler(message: types.Message):
-    await message.answer("Iltimos, pastdagi menyu tugmalaridan birini tanlang.", reply_markup=role_keyboard)
+async def echo_text(message: types.Message, state: FSMContext):
+    await cmd_start(message, state)
 
-# ==========================================
-# 5. Ishga tushirish
-# ==========================================
+# --- RENDER PORT TALABINI BAJARISH UCHUN WEB SERVER ---
+async def handle_home(request):
+    return web.Response(text="Safar Taxi Yo'lovchi boti ishlamoqda!")
+
+async def web_server():
+    app = web.Application()
+    app.add_routes([web.get("/", handle_home)])
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.environ.get("PORT", 10000))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+
 async def main():
-    keep_alive()
-    print("Safar Bot muvaffaqiyatli ishga tushdi!")
-    await dp.start_polling(bot)
+    logging.basicConfig(level=logging.INFO)
+    print("Yo'lovchi boti va server muvaffaqiyatli ishga tushdi...")
+    await asyncio.gather(web_server(), dp.start_polling(bot))
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     asyncio.run(main())
