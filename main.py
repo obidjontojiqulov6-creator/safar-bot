@@ -458,16 +458,85 @@ async def echo_text(message: types.Message, state: FSMContext):
 # ==========================================================
 async def handle_driver_app(request):
     lang = request.query.get("lang", "uz")
-    user_id = request.query.get("user_id", "")
     cities = CITIES_UZ if lang == "uz" else CITIES_RU
     options_html = "".join([f'<option value="{c}">{c}</option>' for c in cities])
+
+    # Til bo'yicha matnlar
+    if lang == "uz":
+        t_reg = "Haydovchi Anketasi"
+        l_name = "Ism va Familiya:"
+        l_photo = "Profil rasmi (URL):"
+        l_phone = "Telefon raqam:"
+        l_car = "Avtomobil rusumi va rangi:"
+        l_plate = "Avtomobil davlat raqami:"
+        l_car1 = "Mashina old tomoni rasmi (URL):"
+        l_car2 = "Mashina orqa tomoni rasmi (URL):"
+        l_from = "Hozirgi shahar (Jo'nash):"
+        l_to = "Boradigan shahar:"
+        btn_reg = "Ro'yxatdan o'tish"
+        t_prof = "Mening Profilim"
+        lbl_name = "Ism"
+        lbl_tel = "Tel"
+        lbl_car_str = "Mashina"
+        lbl_bal = "Balans"
+        t_set = "Yo'nalish va Sozlamalar"
+        l_pass_cnt = "Odamlar soni (Maksimal):"
+        l_deliv = "Dastavka (Pochta/Yuk) olish:"
+        l_min_p = "1 odam uchun Minimal narx (so'm):"
+        l_max_p = "1 odam uchun Maksimal narx (so'm):"
+        btn_save = "Saqlash"
+        t_orders = "Mos keluvchi Yo'lovchilar"
+        no_orders = "Hozircha buyurtmalar yo'q."
+        t_topup = "Balansni to'ldirish"
+        cur_bal = "Joriy balansingiz:"
+        select_sum = "To'ldirish summasini tanlang:"
+        nav1 = "Profil"
+        nav2 = "Yo'nalish"
+        nav3 = "Yo'lovchilar"
+        nav4 = "Balans"
+        ha = "Ha"
+        yoq = "Yo'q"
+    else:
+        t_reg = "Анкета Водителя"
+        l_name = "Имя и Фамилия:"
+        l_photo = "Фото профиля (URL):"
+        l_phone = "Номер телефона:"
+        l_car = "Модель и цвет машины:"
+        l_plate = "Гос. номер машины:"
+        l_car1 = "Фото машины спереди (URL):"
+        l_car2 = "Фото машины сзади (URL):"
+        l_from = "Текущий город (Откуда):"
+        l_to = "Город назначения (Куда):"
+        btn_reg = "Зарегистрироваться"
+        t_prof = "Мой Профиль"
+        lbl_name = "Имя"
+        lbl_tel = "Тел"
+        lbl_car_str = "Машина"
+        lbl_bal = "Баланс"
+        t_set = "Маршрут и Настройки"
+        l_pass_cnt = "Количество пассажиров (Макс):"
+        l_deliv = "Доставка (Посылка/Груз):"
+        l_min_p = "Минимальная цена за 1 чел (сум):"
+        l_max_p = "Максимальная цена за 1 чел (сум):"
+        btn_save = "Сохранить"
+        t_orders = "Подходящие Пассажиры"
+        no_orders = "Пока нет заказов."
+        t_topup = "Пополнение баланса"
+        cur_bal = "Ваш текущий баланс:"
+        select_sum = "Выберите сумму пополнения:"
+        nav1 = "Профиль"
+        nav2 = "Маршрут"
+        nav3 = "Пассажиры"
+        nav4 = "Баланс"
+        ha = "Да"
+        yoq = "Нет"
 
     html_content = f"""<!DOCTYPE html>
 <html lang="{lang}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Haydovchi Kabineti</title>
+    <title>{t_reg}</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         body {{
@@ -479,7 +548,6 @@ async def handle_driver_app(request):
         .tab-content {{ display: none; padding: 16px; }}
         .tab-content.active {{ display: block; }}
         
-        /* Navigation Bar */
         .nav-bar {{
             position: fixed; bottom: 0; left: 0; width: 100%;
             background: var(--tg-theme-secondary-bg-color, #fff);
@@ -495,7 +563,6 @@ async def handle_driver_app(request):
         .nav-item.active {{ color: var(--tg-theme-button-color, #0088cc); }}
         .nav-item div {{ font-size: 20px; margin-bottom: 2px; }}
 
-        /* Cards & Forms */
         .card {{
             background: var(--tg-theme-secondary-bg-color, #ffffff);
             padding: 16px; border-radius: 14px;
@@ -517,61 +584,59 @@ async def handle_driver_app(request):
         .profile-img {{ width: 80px; height: 80px; border-radius: 50%; object-fit: cover; display: block; margin: 0 auto 10px auto; }}
         .car-photos {{ display: flex; gap: 10px; margin-top: 10px; }}
         .car-photos img {{ width: 50%; height: 90px; border-radius: 8px; object-fit: cover; }}
-        .order-box {{ border-left: 4px solid #0088cc; padding: 10px; margin-bottom: 10px; background: rgba(0,136,204,0.05); border-radius: 0 8px 8px 0; }}
     </style>
 </head>
 <body>
 
-    <!-- 1. RO'YXATDAN O'TISH SAHIFASI (Agar oldin o'tmagan bo'lsa) -->
+    <!-- RO'YXATDAN O'TISH SAHIFASI -->
     <div id="registerScreen" class="tab-content active">
         <div class="card">
-            <h2>🚖 {"Haydovchi Anketasi" if lang=="uz" else "Анкета Водителя"}</h2>
+            <h2>🚖 {t_reg}</h2>
             <form id="regForm">
-                <label>{"Ism va Familiya:" if lang=="uz" else "Имя и Фамилия:"}</label>
+                <label>{l_name}</label>
                 <input type="text" id="reg_name" required placeholder="Sardor Rahimov">
 
-                <label>{"Profil rasmi (URL):" if lang=="uz" else "Фото профиля (URL):"}</label>
+                <label>{l_photo}</label>
                 <input type="url" id="reg_profile_photo" required placeholder="https://example.com/photo.jpg">
 
-                <label>{"Telefon raqam:" if lang=="uz" else "Номер телефона:"}</label>
+                <label>{l_phone}</label>
                 <input type="tel" id="reg_phone" required placeholder="+998901234567">
 
-                <label>{"Avtomobil rusumi va rangi:" if lang=="uz" else "Модель и цвет машины:"}</label>
+                <label>{l_car}</label>
                 <input type="text" id="reg_car_model" required placeholder="Gentra (Oq)">
 
-                <label>{"Avtomobil davlat raqami:" if lang=="uz" else "Гос. номер машины:"}</label>
+                <label>{l_plate}</label>
                 <input type="text" id="reg_car_plate" required placeholder="01 A 777 AA">
 
-                <label>{"Mashina old tomoni rasmi (URL):" if lang=="uz" else "Фото машины спереди (URL):"}</label>
+                <label>{l_car1}</label>
                 <input type="url" id="reg_car_photo1" required placeholder="https://example.com/car1.jpg">
 
-                <label>{"Mashina orqa tomoni rasmi (URL):" if lang=="uz" else "Фото машины сзади (URL):"}</label>
+                <label>{l_car2}</label>
                 <input type="url" id="reg_car_photo2" required placeholder="https://example.com/car2.jpg">
 
-                <label>{"Hozirgi shahar (Jo'nash):" if lang=="uz" else "Текущий город (Откуда):"}</label>
+                <label>{l_from}</label>
                 <select id="reg_from">{options_html}</select>
 
-                <label>{"Boradigan shahar:" if lang=="uz" else "Город назначения (Куда):"}</label>
+                <label>{l_to}</label>
                 <select id="reg_to">{options_html}</select>
 
-                <button type="submit">{"Ro'yxatdan o'tish" if lang=="uz" else "Зарегистрироваться"}</button>
+                <button type="submit">{btn_reg}</button>
             </form>
         </div>
     </div>
 
-    <!-- 2. ASOSIY 4 TA BO'LIMLI DASHBOARD -->
+    <!-- DASHBOARD -->
     <div id="dashboardApp" style="display: none;">
         
         <!-- 1-BO'LIM: PROFIL -->
         <div id="tab1" class="tab-content">
             <div class="card">
-                <h2>👤 {"Mening Profilim" if lang=="uz" else "Мой Профиль"}</h2>
+                <h2>👤 {t_prof}</h2>
                 <img id="p_img" class="profile-img" src="" alt="Profil">
-                <p><b>👤 {"Ism": if lang=="uz" else "Имя"}:</b> <span id="p_name"></span></p>
-                <p><b>📞 {"Tel": if lang=="uz" else "Тел"}:</b> <span id="p_phone"></span></p>
-                <p><b>🚗 {"Mashina": if lang=="uz" else "Машина"}:</b> <span id="p_car"></span> (<span id="p_plate"></span>)</p>
-                <p><b>💳 {"Balans": if lang=="uz" else "Баланс"}:</b> <span id="p_balance"></span> so'm</p>
-                <label>{"Mashina rasmlari:" if lang=="uz" else "Фото машины:"}</label>
+                <p><b>👤 {lbl_name}:</b> <span id="p_name"></span></p>
+                <p><b>📞 {lbl_tel}:</b> <span id="p_phone"></span></p>
+                <p><b>🚗 {lbl_car_str}:</b> <span id="p_car"></span> (<span id="p_plate"></span>)</p>
+                <p><b>💳 {lbl_bal}:</b> <span id="p_balance"></span> so'm</p>
                 <div class="car-photos">
                     <img id="p_car1" src="" alt="Car 1">
                     <img id="p_car2" src="" alt="Car 2">
@@ -579,18 +644,18 @@ async def handle_driver_app(request):
             </div>
         </div>
 
-        <!-- 2-BO'LIM: YO'NALISH VA SOZLAMALAR -->
+        <!-- 2-BO'LIM: YO'NALISH -->
         <div id="tab2" class="tab-content">
             <div class="card">
-                <h2>⚙️ {"Yo'nalish va Sozlamalar" if lang=="uz" else "Маршрут и Настройки"}</h2>
+                <h2>⚙️ {t_set}</h2>
                 <form id="settingsForm">
-                    <label>{"Jo'nash shahri:" if lang=="uz" else "Город отправления:"}</label>
+                    <label>{l_from}</label>
                     <select id="set_from">{options_html}</select>
 
-                    <label>{"Boradigan shahar:" if lang=="uz" else "Город назначения:"}</label>
+                    <label>{l_to}</label>
                     <select id="set_to">{options_html}</select>
 
-                    <label>{"Odamlar soni (Maksimal):" if lang=="uz" else "Количество пассажиров (Макс):"}</label>
+                    <label>{l_pass_cnt}</label>
                     <select id="set_passengers">
                         <option value="1">1</option>
                         <option value="2">2</option>
@@ -598,19 +663,19 @@ async def handle_driver_app(request):
                         <option value="4" selected>4</option>
                     </select>
 
-                    <label>{"Dastavka (Pochta/Yuk) olish:" if lang=="uz" else "Доставка (Посылка/Груз):"}</label>
+                    <label>{l_deliv}</label>
                     <select id="set_delivery">
-                        <option value="Ha">{"Ha" if lang=="uz" else "Да"}</option>
-                        <option value="Yo'q" selected>{"Yo'q" if lang=="uz" else "Нет"}</option>
+                        <option value="{ha}">{ha}</option>
+                        <option value="{yoq}" selected>{yoq}</option>
                     </select>
 
-                    <label>{"1 odam uchun Minimal narx (so'm):" if lang=="uz" else "Минимальная цена за 1 чел (сум):"}</label>
+                    <label>{l_min_p}</label>
                     <input type="number" id="set_min_price" value="50000">
 
-                    <label>{"1 odam uchun Maksimal narx (so'm):" if lang=="uz" else "Максимальная цена за 1 чел (сум):"}</label>
+                    <label>{l_max_p}</label>
                     <input type="number" id="set_max_price" value="150000">
 
-                    <button type="submit">{"Saqlash" if lang=="uz" else "Сохранить"}</button>
+                    <button type="submit">{btn_save}</button>
                 </form>
             </div>
         </div>
@@ -618,9 +683,9 @@ async def handle_driver_app(request):
         <!-- 3-BO'LIM: YO'LOVCHILAR -->
         <div id="tab3" class="tab-content">
             <div class="card">
-                <h2>👥 {"Mos keluvchi Yo'lovchilar" if lang=="uz" else "Подходящие Пассажиры"}</h2>
+                <h2>👥 {t_orders}</h2>
                 <div id="ordersList">
-                    <p style="text-align: center; color: #777;">{"Hozircha buyurtmalar yo'q." if lang=="uz" else "Пока нет заказов."}</p>
+                    <p style="text-align: center; color: #777;">{no_orders}</p>
                 </div>
             </div>
         </div>
@@ -628,30 +693,30 @@ async def handle_driver_app(request):
         <!-- 4-BO'LIM: BALANS -->
         <div id="tab4" class="tab-content">
             <div class="card">
-                <h2>💳 {"Balansni to'ldirish" if lang=="uz" else "Пополнение баланса"}</h2>
-                <p>{"Joriy balansingiz:" if lang=="uz" else "Ваш текущий баланс:"} <b id="b_balance" style="color: green;">0</b> so'm</p>
-                <label>{"To'ldirish summasini tanlang:" if lang=="uz" else "Выберите сумму пополнения:"}</label>
+                <h2>💳 {t_topup}</h2>
+                <p>{cur_bal} <b id="b_balance" style="color: green;">0</b> so'm</p>
+                <label>{select_sum}</label>
                 <div style="display: flex; gap: 10px; margin-top: 10px;">
-                    <button type="button" onclick="topUp(10000)">+ 10,000 uzs</button>
-                    <button type="button" onclick="topUp(25000)">+ 25,000 uzs</button>
-                    <button type="button" onclick="topUp(50000)">+ 50,000 uzs</button>
+                    <button type="button" onclick="topUp(10000)">+ 10,000</button>
+                    <button type="button" onclick="topUp(25000)">+ 25,000</button>
+                    <button type="button" onclick="topUp(50000)">+ 50,000</button>
                 </div>
             </div>
         </div>
 
-        <!-- PASTKI 4 TA TUGMA (NAVBAR) -->
+        <!-- NAVBAR -->
         <div class="nav-bar">
             <div class="nav-item active" onclick="switchTab(1)">
-                <div>👤</div>{"Profil" if lang=="uz" else "Профиль"}
+                <div>👤</div>{nav1}
             </div>
             <div class="nav-item" onclick="switchTab(2)">
-                <div>⚙️</div>{"Yo'nalish" if lang=="uz" else "Маршрут"}
+                <div>⚙️</div>{nav2}
             </div>
             <div class="nav-item" onclick="switchTab(3)">
-                <div>👥</div>{"Yo'lovchilar" if lang=="uz" else "Пассажиры"}
+                <div>👥</div>{nav3}
             </div>
             <div class="nav-item" onclick="switchTab(4)">
-                <div>💳</div>{"Balans" if lang=="uz" else "Баланс"}
+                <div>💳</div>{nav4}
             </div>
         </div>
 
@@ -667,7 +732,6 @@ async def handle_driver_app(request):
             showDashboard(JSON.parse(driverData));
         }}
 
-        // Ro'yxatdan o'tish formasi
         document.getElementById('regForm').addEventListener('submit', function(e) {{
             e.preventDefault();
             let data = {{
@@ -681,7 +745,7 @@ async def handle_driver_app(request):
                 from_city: document.getElementById('reg_from').value,
                 to_city: document.getElementById('reg_to').value,
                 passengers_count: 4,
-                delivery: "Yo'q",
+                delivery: "{yoq}",
                 min_price: 50000,
                 max_price: 150000,
                 balance: 15000,
@@ -693,7 +757,6 @@ async def handle_driver_app(request):
             showDashboard(data);
         }});
 
-        // Sozlamalarni saqlash
         document.getElementById('settingsForm').addEventListener('submit', function(e) {{
             e.preventDefault();
             let data = JSON.parse(localStorage.getItem('safar_driver'));
@@ -706,14 +769,13 @@ async def handle_driver_app(request):
 
             localStorage.setItem('safar_driver', JSON.stringify(data));
             tg.sendData(JSON.stringify(data));
-            alert("✅ Sozlamalar saqlandi!");
+            alert("Saqlandi!");
         }});
 
         function showDashboard(data) {{
             document.getElementById('registerScreen').style.display = 'none';
             document.getElementById('dashboardApp').style.display = 'block';
 
-            // Profil ma'lumotlarini to'ldirish
             document.getElementById('p_img').src = data.profile_photo;
             document.getElementById('p_name').innerText = data.name;
             document.getElementById('p_phone').innerText = data.phone;
@@ -724,7 +786,6 @@ async def handle_driver_app(request):
             document.getElementById('p_car1').src = data.car_photo1;
             document.getElementById('p_car2').src = data.car_photo2;
 
-            // Sozlamalar selectlarini to'g'rilash
             document.getElementById('set_from').value = data.from_city;
             document.getElementById('set_to').value = data.to_city;
             document.getElementById('set_passengers').value = data.passengers_count;
@@ -751,7 +812,7 @@ async def handle_driver_app(request):
             localStorage.setItem('safar_driver', JSON.stringify(data));
             document.getElementById('p_balance').innerText = data.balance;
             document.getElementById('b_balance').innerText = data.balance;
-            alert("✅ Balans muvaffaqiyatli to'ldirildi!");
+            alert("Balans to'ldirildi!");
         }}
     </script>
 </body>
