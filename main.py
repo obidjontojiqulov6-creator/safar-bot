@@ -141,7 +141,9 @@ async def select_role(message: types.Message, state: FSMContext):
 
     elif text in ["🚖 Haydovchi kabineti", "🚖 Кабинет водителя"]:
         driver_id = message.from_user.id
-        render_url = os.getenv("RENDER_EXTERNAL_URL", "https://safar-taxi.onrender.com")
+        render_url = os.getenv("RENDER_EXTERNAL_URL", "").rstrip('/')
+        if not render_url:
+            render_url = "https://safar-taxi.onrender.com"
         webapp_url = f"{render_url}/driver-app?lang={lang}&user_id={driver_id}"
         
         inline_builder = InlineKeyboardBuilder()
@@ -451,95 +453,28 @@ async def handle_driver_app(request):
     cities = CITIES_UZ if lang == "uz" else CITIES_RU
     options_html = "".join([f'<option value="{c}">{c}</option>' for c in cities])
 
-    if lang == "uz":
-        t_reg = "Haydovchi Anketasi"
-        l_name = "Ism va Familiya:"
-        l_photo = "Profil rasmini tanlash:"
-        l_phone = "Telefon raqam:"
-        l_car = "Avtomobil rusumi va rangi:"
-        l_plate = "Avtomobil davlat raqami:"
-        l_car1 = "Mashina oldi tomoni rasmini tanlash:"
-        btn_reg = "Ro'yxatdan o'tish"
-        t_prof = "Mening Profilim"
-        lbl_name = "Ism"
-        lbl_tel = "Tel"
-        lbl_car_str = "Mashina"
-        lbl_bal = "Balans"
-        t_set = "Yo'nalish va Sozlamalar"
-        l_from = "Jo'nash shahri:"
-        l_to = "Boradigan shahar:"
-        l_pass_cnt = "Odamlar soni (Maksimal):"
-        l_mode = "Ish tartibi:"
-        mode_1 = "🚖 Faqat yo'lovchi"
-        mode_2 = "📦 Faqat dastafka (yuk)"
-        mode_3 = "🚖 + 📦 Yo'lovchi va Dastafka (Ikkalasi birga)"
-        l_min_p = "1 odam uchun narx (eng kam so'mda):"
-        l_min_d = "Dastavka / Pochta narxi (eng kam so'mda):"
-        btn_save = "Saqlash"
-        t_orders = "Mos keluvchi Buyurtmalar"
-        no_orders = "Hozircha buyurtmalar yo'q."
-        t_topup = "Balansni to'ldirish"
-        cur_bal = "Joriy balansingiz:"
-        select_sum = "To'ldirish summasini tanlang:"
-        nav1 = "Profil"
-        nav2 = "Yo'nalish"
-        nav3 = "Buyurtmalar"
-        nav4 = "Balans"
-        reset_btn = "🔄 Ma'lumotlarni o'chirish va noldan boshlash"
-    else:
-        t_reg = "Анкета Водителя"
-        l_name = "Имя и Фамилия:"
-        l_photo = "Выберите фото профиля:"
-        l_phone = "Номер телефона:"
-        l_car = "Модель и цвет машины:"
-        l_plate = "Гос. номер машины:"
-        l_car1 = "Выберите фото машины спереди:"
-        btn_reg = "Зарегистрироваться"
-        t_prof = "Мой Профиль"
-        lbl_name = "Имя"
-        lbl_tel = "Тел"
-        lbl_car_str = "Машина"
-        lbl_bal = "Баланс"
-        t_set = "Маршрут и Настройки"
-        l_from = "Город отправления:"
-        l_to = "Город назначения:"
-        l_pass_cnt = "Количество пассажиров (Макс):"
-        l_mode = "Режим работы:"
-        mode_1 = "🚖 Только пассажир"
-        mode_2 = "📦 Только доставка (груз)"
-        mode_3 = "🚖 + 📦 Пассажир и Доставка (Вместе)"
-        l_min_p = "Мин. цена за 1 чел (в сумах):"
-        l_min_d = "Мин. цена за доставку (в сумах):"
-        btn_save = "Сохранить"
-        t_orders = "Подходящие Заказы"
-        no_orders = "Пока нет заказов."
-        t_topup = "Пополнение баланса"
-        cur_bal = "Ваш текущий баланс:"
-        select_sum = "Выберите сумму пополнения:"
-        nav1 = "Профиль"
-        nav2 = "Маршрут"
-        nav3 = "Заказы"
-        nav4 = "Баланс"
-        reset_btn = "🔄 Сбросить данные и начать заново"
+    mode_1 = "🚖 Faqat yo'lovchi" if lang == "uz" else "🚖 Только пассажир"
+    mode_2 = "📦 Faqat dastafka (yuk)" if lang == "uz" else "📦 Только доставка (груз)"
+    mode_3 = "🚖 + 📦 Yo'lovchi va Dastafka (Ikkalasi birga)" if lang == "uz" else "🚖 + 📦 Пассажир и Доставка (Вместе)"
 
-    html_content = f"""<!DOCTYPE html>
-<html lang="{lang}">
+    html_content = """<!DOCTYPE html>
+<html lang="uz">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{t_reg}</title>
+    <title>Haydovchi Anketasi</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        body {{
+        body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background-color: var(--tg-theme-bg-color, #f4f4f9);
             color: var(--tg-theme-text-color, #222);
             margin: 0; padding-bottom: 70px;
-        }}
-        .tab-content {{ display: none; padding: 16px; }}
-        .tab-content.active {{ display: block !important; }}
+        }
+        .tab-content { display: none; padding: 16px; }
+        .tab-content.active { display: block !important; }
         
-        .nav-bar {{
+        .nav-bar {
             position: fixed; bottom: 0; left: 0; width: 100%;
             background: var(--tg-theme-secondary-bg-color, #fff);
             display: flex; justify-content: space-around;
@@ -547,51 +482,51 @@ async def handle_driver_app(request):
             box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
             box-sizing: border-box;
             z-index: 999;
-        }}
-        .nav-item {{
+        }
+        .nav-item {
             text-align: center; font-size: 11px; cursor: pointer;
             color: var(--tg-theme-hint-color, #777); font-weight: 600;
-        }}
-        .nav-item.active {{ color: var(--tg-theme-button-color, #0088cc); }}
-        .nav-item div {{ font-size: 20px; margin-bottom: 2px; }}
+        }
+        .nav-item.active { color: var(--tg-theme-button-color, #0088cc); }
+        .nav-item div { font-size: 20px; margin-bottom: 2px; }
 
-        .card {{
+        .card {
             background: var(--tg-theme-secondary-bg-color, #ffffff);
             padding: 16px; border-radius: 14px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 14px;
-        }}
-        h2 {{ color: var(--tg-theme-button-color, #0088cc); text-align: center; margin-top: 0; }}
-        label {{ font-size: 13px; font-weight: 600; display: block; margin-top: 10px; margin-bottom: 4px; }}
-        input, select {{
+        }
+        h2 { color: var(--tg-theme-button-color, #0088cc); text-align: center; margin-top: 0; }
+        label { font-size: 13px; font-weight: 600; display: block; margin-top: 10px; margin-bottom: 4px; }
+        input, select {
             width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px;
             font-size: 14px; box-sizing: border-box; background: var(--tg-theme-bg-color, #fafafa);
             color: var(--tg-theme-text-color, #222);
-        }}
-        button {{
+        }
+        button {
             width: 100%; background-color: var(--tg-theme-button-color, #0088cc);
             color: var(--tg-theme-button-text-color, #fff); border: none;
             padding: 12px; border-radius: 10px; font-size: 15px; font-weight: bold;
             cursor: pointer; margin-top: 16px;
-        }}
-        .reset-btn {{
+        }
+        .reset-btn {
             background-color: #e74c3c !important;
             margin-top: 20px;
-        }}
-        .profile-img {{ width: 90px; height: 90px; border-radius: 50%; object-fit: cover; display: block; margin: 0 auto 12px auto; border: 2px solid #0088cc; }}
-        .car-big-img {{ width: 100%; height: 180px; border-radius: 10px; object-fit: cover; margin-top: 12px; display: block; }}
-        .status-msg {{ font-size: 12px; color: green; display: none; margin-top: 4px; font-weight: bold; }}
+        }
+        .profile-img { width: 90px; height: 90px; border-radius: 50%; object-fit: cover; display: block; margin: 0 auto 12px auto; border: 2px solid #0088cc; }
+        .car-big-img { width: 100%; height: 180px; border-radius: 10px; object-fit: cover; margin-top: 12px; display: block; }
+        .status-msg { font-size: 12px; color: green; display: none; margin-top: 4px; font-weight: bold; }
 
-        .order-card {{
+        .order-card {
             border-left: 4px solid #0088cc; padding: 12px;
             margin-bottom: 12px; background: rgba(0,136,204,0.05);
             border-radius: 0 10px 10px 0;
-        }}
-        .order-title {{ font-weight: bold; font-size: 15px; margin-bottom: 6px; }}
-        .order-info {{ font-size: 13px; color: #555; margin-bottom: 4px; }}
-        .buy-btn {{
+        }
+        .order-title { font-weight: bold; font-size: 15px; margin-bottom: 6px; }
+        .order-info { font-size: 13px; color: #555; margin-bottom: 4px; }
+        .buy-btn {
             background-color: #27ae60; padding: 8px; font-size: 13px;
             margin-top: 8px;
-        }}
+        }
     </style>
 </head>
 <body>
@@ -599,31 +534,31 @@ async def handle_driver_app(request):
     <!-- RO'YXATDAN O'TISH SAHIFASI -->
     <div id="registerScreen" class="tab-content">
         <div class="card">
-            <h2>🚖 {t_reg}</h2>
+            <h2>🚖 Haydovchi Anketasi</h2>
             <form id="regForm">
-                <label>{l_name}</label>
+                <label>Ism va Familiya:</label>
                 <input type="text" id="reg_name" required placeholder="Sardor Rahimov">
 
-                <label>{l_photo}</label>
+                <label>Profil rasmini tanlash:</label>
                 <input type="file" id="file_profile" accept="image/*" required onchange="processFile('file_profile', 'reg_profile_photo', 'status_profile')">
                 <input type="hidden" id="reg_profile_photo">
                 <div id="status_profile" class="status-msg">✅ Rasm tanlandi!</div>
 
-                <label>{l_phone}</label>
+                <label>Telefon raqam:</label>
                 <input type="tel" id="reg_phone" required placeholder="+998901234567">
 
-                <label>{l_car}</label>
+                <label>Avtomobil rusumi va rangi:</label>
                 <input type="text" id="reg_car_model" required placeholder="Gentra (Oq)">
 
-                <label>{l_plate}</label>
+                <label>Avtomobil davlat raqami:</label>
                 <input type="text" id="reg_car_plate" required placeholder="01 A 777 AA">
 
-                <label>{l_car1}</label>
+                <label>Mashina oldi tomoni rasmini tanlash:</label>
                 <input type="file" id="file_car1" accept="image/*" required onchange="processFile('file_car1', 'reg_car_photo1', 'status_car1')">
                 <input type="hidden" id="reg_car_photo1">
                 <div id="status_car1" class="status-msg">✅ Rasm tanlandi!</div>
 
-                <button type="submit" id="submitBtn">{btn_reg}</button>
+                <button type="submit" id="submitBtn">Ro'yxatdan o'tish</button>
             </form>
         </div>
     </div>
@@ -634,32 +569,32 @@ async def handle_driver_app(request):
         <!-- 1-BO'LIM: PROFIL -->
         <div id="tab1" class="tab-content">
             <div class="card">
-                <h2>👤 {t_prof}</h2>
+                <h2>👤 Mening Profilim</h2>
                 <img id="p_img" class="profile-img" src="" alt="Profil">
-                <p><b>👤 {lbl_name}:</b> <span id="p_name"></span></p>
-                <p><b>📞 {lbl_tel}:</b> <span id="p_phone"></span></p>
-                <p><b>🚗 {lbl_car_str}:</b> <span id="p_car"></span> (<span id="p_plate"></span>)</p>
-                <p><b>💳 {lbl_bal}:</b> <span id="p_balance"></span> so'm</p>
+                <p><b>👤 Ism:</b> <span id="p_name"></span></p>
+                <p><b>📞 Tel:</b> <span id="p_phone"></span></p>
+                <p><b>🚗 Mashina:</b> <span id="p_car"></span> (<span id="p_plate"></span>)</p>
+                <p><b>💳 Balans:</b> <span id="p_balance"></span> so'm</p>
                 
                 <label><b>Mashina (Oldi ko'rinishi):</b></label>
                 <img id="p_car1" class="car-big-img" src="" alt="Mashina">
 
-                <button type="button" class="reset-btn" onclick="clearData()">{reset_btn}</button>
+                <button type="button" class="reset-btn" onclick="clearData()">🔄 Ma'lumotlarni o'chirish va noldan boshlash</button>
             </div>
         </div>
 
         <!-- 2-BO'LIM: YO'NALISH VA SOZLAMALAR -->
         <div id="tab2" class="tab-content">
             <div class="card">
-                <h2>⚙️ {t_set}</h2>
+                <h2>⚙️ Yo'nalish va Sozlamalar</h2>
                 <form id="settingsForm">
-                    <label>{l_from}</label>
-                    <select id="set_from">{options_html}</select>
+                    <label>Jo'nash shahri:</label>
+                    <select id="set_from">""" + options_html + """</select>
 
-                    <label>{l_to}</label>
-                    <select id="set_to">{options_html}</select>
+                    <label>Boradigan shahar:</label>
+                    <select id="set_to">""" + options_html + """</select>
 
-                    <label>{l_pass_cnt}</label>
+                    <label>Odamlar soni (Maksimal):</label>
                     <select id="set_passengers">
                         <option value="1">1</option>
                         <option value="2">2</option>
@@ -667,20 +602,20 @@ async def handle_driver_app(request):
                         <option value="4" selected>4</option>
                     </select>
 
-                    <label>{l_mode}</label>
+                    <label>Ish tartibi:</label>
                     <select id="set_work_mode">
-                        <option value="{mode_1}">{mode_1}</option>
-                        <option value="{mode_2}">{mode_2}</option>
-                        <option value="{mode_3}" selected>{mode_3}</option>
+                        <option value='""" + mode_1 + """'>""" + mode_1 + """</option>
+                        <option value='""" + mode_2 + """'>""" + mode_2 + """</option>
+                        <option value='""" + mode_3 + """' selected>""" + mode_3 + """</option>
                     </select>
 
-                    <label>{l_min_p}</label>
+                    <label>1 odam uchun narx (eng kam so'mda):</label>
                     <input type="number" id="set_min_price" value="50000">
 
-                    <label>{l_min_d}</label>
+                    <label>Dastavka / Pochta narxi (eng kam so'mda):</label>
                     <input type="number" id="set_min_delivery_price" value="30000">
 
-                    <button type="submit">{btn_save}</button>
+                    <button type="submit">Saqlash</button>
                 </form>
             </div>
         </div>
@@ -688,9 +623,9 @@ async def handle_driver_app(request):
         <!-- 3-BO'LIM: BUYURTMALAR -->
         <div id="tab3" class="tab-content">
             <div class="card">
-                <h2>👥 {t_orders}</h2>
+                <h2>👥 Mos keluvchi Buyurtmalar</h2>
                 <div id="ordersList">
-                    <p style="text-align: center; color: #777;">{no_orders}</p>
+                    <p style="text-align: center; color: #777;">Hozircha buyurtmalar yo'q.</p>
                 </div>
             </div>
         </div>
@@ -698,9 +633,9 @@ async def handle_driver_app(request):
         <!-- 4-BO'LIM: BALANS -->
         <div id="tab4" class="tab-content">
             <div class="card">
-                <h2>💳 {t_topup}</h2>
-                <p>{cur_bal} <b id="b_balance" style="color: green;">0</b> so'm</p>
-                <label>{select_sum}</label>
+                <h2>💳 Balansni to'ldirish</h2>
+                <p>Joriy balansingiz: <b id="b_balance" style="color: green;">0</b> so'm</p>
+                <label>To'ldirish summasini tanlang:</label>
                 <div style="display: flex; gap: 10px; margin-top: 10px;">
                     <button type="button" onclick="topUp(10000)">+ 10,000</button>
                     <button type="button" onclick="topUp(25000)">+ 25,000</button>
@@ -712,16 +647,16 @@ async def handle_driver_app(request):
         <!-- NAVBAR -->
         <div class="nav-bar">
             <div class="nav-item active" onclick="switchTab(1)">
-                <div>👤</div>{nav1}
+                <div>👤</div>Profil
             </div>
             <div class="nav-item" onclick="switchTab(2)">
-                <div>⚙️</div>{nav2}
+                <div>⚙️</div>Yo'nalish
             </div>
             <div class="nav-item" onclick="switchTab(3)">
-                <div>👥</div>{nav3}
+                <div>👥</div>Buyurtmalar
             </div>
             <div class="nav-item" onclick="switchTab(4)">
-                <div>💳</div>{nav4}
+                <div>💳</div>Balans
             </div>
         </div>
 
@@ -729,55 +664,55 @@ async def handle_driver_app(request):
 
     <script>
         let tg = window.Telegram.WebApp;
-        try {{ tg.expand(); }} catch(err) {{}}
+        try { tg.expand(); } catch(err) {}
 
         let openedOrders = [];
-        try {{
+        try {
             openedOrders = JSON.parse(localStorage.getItem('opened_orders')) || [];
-        }} catch(e) {{ openedOrders = []; }}
+        } catch(e) { openedOrders = []; }
 
-        function initApp() {{
+        function initApp() {
             let driverData = localStorage.getItem('safar_driver');
-            if (driverData) {{
-                try {{
+            if (driverData) {
+                try {
                     let parsed = JSON.parse(driverData);
-                    if (parsed && parsed.name) {{
+                    if (parsed && parsed.name) {
                         showDashboard(parsed);
                         return;
-                    }}
-                }} catch(e) {{}}
-            }}
+                    }
+                } catch(e) {}
+            }
             document.getElementById('registerScreen').style.display = 'block';
             document.getElementById('registerScreen').classList.add('active');
             document.getElementById('dashboardApp').style.display = 'none';
-        }}
+        }
 
         initApp();
 
-        function processFile(inputId, hiddenId, statusId) {{
+        function processFile(inputId, hiddenId, statusId) {
             let fileInput = document.getElementById(inputId);
             let file = fileInput.files[0];
             if (!file) return;
 
             let reader = new FileReader();
-            reader.onload = function(e) {{
+            reader.onload = function(e) {
                 document.getElementById(hiddenId).value = e.target.result;
                 document.getElementById(statusId).style.display = 'block';
-            }};
+            };
             reader.readAsDataURL(file);
-        }}
+        }
 
-        document.getElementById('regForm').addEventListener('submit', function(e) {{
+        document.getElementById('regForm').addEventListener('submit', function(e) {
             e.preventDefault();
             let pPhoto = document.getElementById('reg_profile_photo').value;
             let cPhoto1 = document.getElementById('reg_car_photo1').value;
 
-            if (!pPhoto || !cPhoto1) {{
+            if (!pPhoto || !cPhoto1) {
                 alert("Iltimos, ikkala rasmni ham tanlang!");
                 return;
-            }}
+            }
 
-            let data = {{
+            let data = {
                 name: document.getElementById('reg_name').value,
                 profile_photo: pPhoto,
                 phone: document.getElementById('reg_phone').value,
@@ -787,19 +722,18 @@ async def handle_driver_app(request):
                 from_city: "Toshkent",
                 to_city: "Buxoro",
                 passengers_count: 4,
-                work_mode: "{mode_3}",
+                work_mode: "🚖 + 📦 Yo'lovchi va Dastafka (Ikkalasi birga)",
                 min_price: 50000,
                 min_delivery_price: 30000,
-                balance: 15000,
-                lang: "{lang}"
-            }};
+                balance: 15000
+            };
 
             localStorage.setItem('safar_driver', JSON.stringify(data));
-            try {{ tg.sendData(JSON.stringify(data)); }} catch(err) {{}}
+            try { tg.sendData(JSON.stringify(data)); } catch(err) {}
             showDashboard(data);
-        }});
+        });
 
-        document.getElementById('settingsForm').addEventListener('submit', function(e) {{
+        document.getElementById('settingsForm').addEventListener('submit', function(e) {
             e.preventDefault();
             let data = JSON.parse(localStorage.getItem('safar_driver'));
             if(!data) return;
@@ -807,153 +741,4 @@ async def handle_driver_app(request):
             data.from_city = document.getElementById('set_from').value;
             data.to_city = document.getElementById('set_to').value;
             data.passengers_count = document.getElementById('set_passengers').value;
-            data.work_mode = document.getElementById('set_work_mode').value;
-            data.min_price = document.getElementById('set_min_price').value;
-            data.min_delivery_price = document.getElementById('set_min_delivery_price').value;
-
-            localStorage.setItem('safar_driver', JSON.stringify(data));
-            try {{ tg.sendData(JSON.stringify(data)); }} catch(err) {{}}
-            alert("Saqlandi!");
-            loadOrders();
-        }});
-
-        function showDashboard(data) {{
-            document.getElementById('registerScreen').style.display = 'none';
-            document.getElementById('registerScreen').classList.remove('active');
-            document.getElementById('dashboardApp').style.display = 'block';
-
-            document.getElementById('p_img').src = data.profile_photo || '';
-            document.getElementById('p_name').innerText = data.name || '';
-            document.getElementById('p_phone').innerText = data.phone || '';
-            document.getElementById('p_car').innerText = data.car_model || '';
-            document.getElementById('p_plate').innerText = data.car_plate || '';
-            document.getElementById('p_balance').innerText = data.balance || 0;
-            document.getElementById('b_balance').innerText = data.balance || 0;
-            document.getElementById('p_car1').src = data.car_photo1 || '';
-
-            document.getElementById('set_from').value = data.from_city || "Toshkent";
-            document.getElementById('set_to').value = data.to_city || "Buxoro";
-            document.getElementById('set_passengers').value = data.passengers_count || 4;
-            document.getElementById('set_work_mode').value = data.work_mode || "{mode_3}";
-            document.getElementById('set_min_price').value = data.min_price || 50000;
-            document.getElementById('set_min_delivery_price').value = data.min_delivery_price || 30000;
-
-            switchTab(1);
-        }}
-
-        async function loadOrders() {{
-            let listEl = document.getElementById('ordersList');
-            try {{
-                let res = await fetch('/api/orders');
-                let orders = await res.json();
-                
-                if(!orders || orders.length === 0) {{
-                    listEl.innerHTML = '<p style="text-align: center; color: #777;">Hozircha buyurtmalar yo\'q.</p>';
-                    return;
-                }}
-
-                let html = '';
-                orders.forEach(o => {{
-                    let isOpened = openedOrders.includes(o.id);
-                    let phoneStr = isOpened ? '<b>📞 Tel:</b> +' + o.phone : '<b>📞 Tel:</b> +998****** (Yopiq)';
-                    let btnHtml = isOpened ? '<p style="color:green; font-weight:bold; margin-top:6px;">✅ Raqam ochilgan</p>' : '<button type="button" class="buy-btn" onclick="buyOrder(\'' + o.id + '\')">🔓 Raqamni ochish (3,000 so\'m)</button>';
-
-                    html += '<div class="order-card">' +
-                            '<div class="order-title">📍 ' + o.from_city + ' ➡️ ' + o.to_city + '</div>' +
-                            '<div class="order-info"><b>Turi:</b> ' + o.type + ' (' + o.passengers + ')</div>' +
-                            '<div class="order-info"><b>Taklif narxi:</b> ' + o.price + ' so\'m</div>' +
-                            '<div class="order-info"><b>Ismi:</b> ' + o.name + '</div>' +
-                            '<div class="order-info">' + phoneStr + '</div>' +
-                            '<div class="order-info"><b>Izoh:</b> ' + o.comment + '</div>' +
-                            btnHtml +
-                            '</div>';
-                }});
-                listEl.innerHTML = html;
-            }} catch(e) {{
-                listEl.innerHTML = '<p style="text-align: center; color: red;">Xatolik yuz berdi.</p>';
-            }}
-        }}
-
-        function buyOrder(orderId) {{
-            let driverData = JSON.parse(localStorage.getItem('safar_driver'));
-            if (!driverData || driverData.balance < 3000) {{
-                alert("⚠️ Balansizgizda yetarli pul yo'q! Iltimos, Balans bo'limidan to'ldiring.");
-                switchTab(4);
-                return;
-            }}
-
-            if (confirm("Ushbu buyurtma raqamini ochish uchun balansingizdan 3,000 so'm yechilsinmi?")) {{
-                driverData.balance -= 3000;
-                localStorage.setItem('safar_driver', JSON.stringify(driverData));
-                
-                openedOrders.push(orderId);
-                localStorage.setItem('opened_orders', JSON.stringify(openedOrders));
-
-                document.getElementById('p_balance').innerText = driverData.balance;
-                document.getElementById('b_balance').innerText = driverData.balance;
-
-                alert("✅ Raqam ochildi!");
-                loadOrders();
-            }}
-        }}
-
-        function switchTab(tabNum) {{
-            document.querySelectorAll('#dashboardApp .tab-content').forEach(el => el.classList.remove('active'));
-            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-
-            if(tabNum === 1) document.getElementById('tab1').classList.add('active');
-            if(tabNum === 2) document.getElementById('tab2').classList.add('active');
-            if(tabNum === 3) {{
-                document.getElementById('tab3').classList.add('active');
-                loadOrders();
-            }}
-            if(tabNum === 4) document.getElementById('tab4').classList.add('active');
-
-            document.querySelectorAll('.nav-item')[tabNum - 1].classList.add('active');
-        }}
-
-        function clearData() {{
-            if (confirm("Ma'lumotlarni o'chirib, qayta ro'yxatdan o'tasizmi?")) {{
-                localStorage.removeItem('safar_driver');
-                localStorage.removeItem('opened_orders');
-                location.reload();
-            }}
-        }}
-
-        function topUp(amount) {{
-            let data = JSON.parse(localStorage.getItem('safar_driver'));
-            if(!data) return;
-            data.balance += amount;
-            localStorage.setItem('safar_driver', JSON.stringify(data));
-            document.getElementById('p_balance').innerText = data.balance;
-            document.getElementById('b_balance').innerText = data.balance;
-            alert("✅ Balans muvaffaqiyatli to'ldirildi!");
-        }}
-    </script>
-</body>
-</html>
-"""
-    return web.Response(text=html_content, content_type='text/html')
-
-async def handle_home(request):
-    return web.Response(text="Safar Taxi Bot ishlamoqda!")
-
-async def web_server():
-    app = web.Application()
-    app.router.add_get("/", handle_home)
-    app.router.add_get("/driver-app", handle_driver_app)
-    app.router.add_get("/api/orders", handle_get_orders)
-
-    runner = web.AppRunner(app)
-    await runner.setup()
-    port = int(os.environ.get("PORT", 10000))
-    site = web.TCPSite(runner, "0.0.0.0", port)
-    await site.start()
-
-async def main():
-    logging.basicConfig(level=logging.INFO)
-    print("Bot va Mini App ishga tushdi...")
-    await asyncio.gather(web_server(), dp.start_polling(bot))
-
-if __name__ == "__main__":
-    asyncio.run(main())
+            data.work_mode = document.getElementById('
