@@ -1,3 +1,4 @@
 aiogram
 pydantic
 flask
+gunicorn
