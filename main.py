@@ -144,7 +144,6 @@ async def select_role(message: types.Message, state: FSMContext):
     elif text in ["🚖 Haydovchi kabineti", "🚖 Кабинет водителя"]:
         driver_id = message.from_user.id
         
-        # Render'dagi ilovaning o'z URL manzilini olamiz
         render_url = os.getenv("RENDER_EXTERNAL_URL", "")
         webapp_url = f"{render_url}/driver-form?lang={lang}&user_id={driver_id}"
         
@@ -167,7 +166,7 @@ async def select_role(message: types.Message, state: FSMContext):
         err = "Iltimos, tugmalardan birini tanlang!" if lang == "uz" else "Пожалуйста, выберите с помощью кнопок!"
         return await message.answer(err)
 
-# --- MINI APP DAN KELGAN HAYDOVCHI MA'LUMOTLARINI QABUL QILISH ---
+# --- MINI APP DAN KELGAN HAYDOVCHI MA'LUMOTLARini QABUL QILISH ---
 @dp.message(F.web_app_data)
 async def handle_web_app_data(message: types.Message):
     try:
@@ -189,7 +188,7 @@ async def handle_web_app_data(message: types.Message):
     except Exception:
         await message.answer("❌ Ma'lumotlarni saqlashda xatolik yuz berdi.")
 
-# --- YO'LOVCHI SO'ROVNOMASI (Siz tasdiqlagan qism) ---
+# --- YO'LOVCHI SO'ROVNOMASI ---
 @dp.message(BookingState.waiting_for_from_city)
 async def select_from_city(message: types.Message, state: FSMContext):
     data = await state.get_data()
@@ -293,7 +292,7 @@ async def enter_price(message: types.Message, state: FSMContext):
     data = await state.get_data()
     lang = data.get("lang", "uz")
 
-    if message.text in ["🔙 Orqaga", "🔙 Назад"]:
+    if text_in_back := (message.text in ["🔙 Orqaga", "🔙 Назад"]):
         await state.set_state(BookingState.waiting_for_passengers)
         return await show_passenger_menu(message, data.get("passengers", []), lang)
 
@@ -374,89 +373,98 @@ async def echo_text(message: types.Message, state: FSMContext):
 async def handle_driver_form(request):
     lang = request.query.get("lang", "uz")
     
-    html_content = f"""
-    <!DOCTYPE html>
-    <html lang="{lang}">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Haydovchi Anketasi</title>
-        <script src="https://telegram.org/js/telegram-web-app.js"></script>
-        <style>
-            body {{
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                background-color: var(--tg-theme-bg-color, #f4f4f9);
-                color: var(--tg-theme-text-color, #222);
-                margin: 0; padding: 20px;
-            }}
-            .card {{
-                background: var(--tg-theme-secondary-bg-color, #ffffff);
-                padding: 20px; border-radius: 16px;
-                box-shadow: 0 4px 15px rgba(0,0,0,0.08);
-                max-width: 400px; margin: auto;
-            }}
-            h2 {{ text-align: center; color: var(--tg-theme-button-color, #0088cc); margin-bottom: 20px; }}
-            label {{ font-size: 14px; font-weight: 600; display: block; margin-top: 12px; margin-bottom: 4px; }}
-            input, select {{
-                width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px;
-                font-size: 15px; box-sizing: border-box; background: #fafafa;
-            }}
-            button {{
-                width: 100%; background-color: var(--tg-theme-button-color, #0088cc);
-                color: var(--tg-theme-button-text-color, #fff); border: none;
-                padding: 14px; border-radius: 10px; font-size: 16px; font-weight: bold;
-                cursor: pointer; margin-top: 24px;
-            }}
-        </style>
-    </head>
-    <body>
-        <div class="card">
-            <h2>🚖 {"Haydovchi Anketasi" if lang=="uz" else "Анкета Водителя"}</h2>
-            <form id="driverForm">
-                <label>{"Ism va Familiya:" if lang=="uz" else "Имя и Фамилия:"}</label>
-                <input type="text" id="name" required placeholder="{"Masalan: Sardor Rahimov" if lang=="uz" else "Например: Сардор Рахимов"}">
+    options_html = "".join([f'<option value="{c}">{c}</option>' for c in CITIES])
+    title = "Haydovchi Anketasi" if lang == "uz" else "Анкета Водителя"
+    lbl_name = "Ism va Familiya:" if lang == "uz" else "Имя и Фамилия:"
+    ph_name = "Masalan: Sardor Rahimov" if lang == "uz" else "Например: Сардор Рахимов"
+    lbl_phone = "Telefon raqam:" if lang == "uz" else "Номер телефона:"
+    lbl_car = "Mashina rusumi va raqami:" if lang == "uz" else "Модель и номер машины:"
+    lbl_from = "Hozirgi shahar (Jo'nash):" if lang == "uz" else "Текущий город (Откуда):"
+    lbl_to = "Boradigan shahar:" if lang == "uz" else "Город назначения (Куда):"
+    btn_text = "Ro'yxatdan o'tish" if lang == "uz" else "Зарегистрироваться"
 
-                <label>{"Telefon raqam:" if lang=="uz" else "Номер телефона:"}</label>
-                <input type="tel" id="phone" required placeholder="+998901234567">
+    html_content = f"""<!DOCTYPE html>
+<html lang="{lang}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{title}</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--tg-theme-bg-color, #f4f4f9);
+            color: var(--tg-theme-text-color, #222);
+            margin: 0; padding: 20px;
+        }}
+        .card {{
+            background: var(--tg-theme-secondary-bg-color, #ffffff);
+            padding: 20px; border-radius: 16px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+            max-width: 400px; margin: auto;
+        }}
+        h2 {{ text-align: center; color: var(--tg-theme-button-color, #0088cc); margin-bottom: 20px; }}
+        label {{ font-size: 14px; font-weight: 600; display: block; margin-top: 12px; margin-bottom: 4px; }}
+        input, select {{
+            width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px;
+            font-size: 15px; box-sizing: border-box; background: #fafafa;
+        }}
+        button {{
+            width: 100%; background-color: var(--tg-theme-button-color, #0088cc);
+            color: var(--tg-theme-button-text-color, #fff); border: none;
+            padding: 14px; border-radius: 10px; font-size: 16px; font-weight: bold;
+            cursor: pointer; margin-top: 24px;
+        }}
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>🚖 {title}</h2>
+        <form id="driverForm">
+            <label>{lbl_name}</label>
+            <input type="text" id="name" required placeholder="{ph_name}">
 
-                <label>{"Mashina rusumi va raqami:" if lang=="uz" else "Модель и номер машины:"}</label>
-                <input type="text" id="car" required placeholder="Gentra 01 A 777 AA">
+            <label>{lbl_phone}</label>
+            <input type="tel" id="phone" required placeholder="+998901234567">
 
-                <label>{"Hozirgi shahar (Jo'nash):" if lang=="uz" else "Текущий город (Откуда):"}</label>
-                <select id="from_city">
-                    {"".join([f'<option value="{c}">{c}</option>' for c in CITIES])}
-                </select>
+            <label>{lbl_car}</label>
+            <input type="text" id="car" required placeholder="Gentra 01 A 777 AA">
 
-                <label>{"Boradigan shahar:" if lang=="uz" else "Город назначения (Куда):"}</label>
-                <select id="to_city">
-                    {"".join([f'<option value="{c}">{c}</option>' for c in CITIES])}
-                </select>
+            <label>{lbl_from}</label>
+            <select id="from_city">
+                {options_html}
+            </select>
 
-                <button type="submit">{"Ro'yxatdan o'tish" if lang=="uz" else "Зарегистрироваться"}</button>
-            </form>
-        </div>
+            <label>{lbl_to}</label>
+            <select id="to_city">
+                {options_html}
+            </select>
 
-        <script>
-            let tg = window.Telegram.WebApp;
-            tg.expand();
+            <button type="submit">{btn_text}</button>
+        </form>
+    </div>
 
-            document.getElementById('driverForm').addEventListener('submit', function(e) {
-                e.preventDefault();
-                let data = {
-                    name: document.getElementById('name').value,
-                    phone: document.getElementById('phone').value,
-                    car: document.getElementById('car').value,
-                    from_city: document.getElementById('from_city').value,
-                    to_city: document.getElementById('to_city').value,
-                    lang: "{lang}"
-                };
-                tg.sendData(JSON.stringify(data));
-                tg.close();
-            });
-        </script>
-    </body>
-    </html>
-    """
+    <script>
+        let tg = window.Telegram.WebApp;
+        tg.expand();
+
+        document.getElementById('driverForm').addEventListener('submit', function(e) {{
+            e.preventDefault();
+            let data = {{
+                name: document.getElementById('name').value,
+                phone: document.getElementById('phone').value,
+                car: document.getElementById('car').value,
+                from_city: document.getElementById('from_city').value,
+                to_city: document.getElementById('to_city').value,
+                lang: "{lang}"
+            }};
+            tg.sendData(JSON.stringify(data));
+            tg.close();
+        }});
+    </script>
+</body>
+</html>
+"""
     return web.Response(text=html_content, content_type='text/html')
 
 async def handle_home(request):
