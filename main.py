@@ -46,14 +46,13 @@ LAST_VISIT_DATE = datetime.now().date()
 
 ADMIN_ID = 123456789  # Telegram ID raqamingiz
 
-# FSM holatlari (Yo'lovchi va Dastafka uchun)
 class BookingState(StatesGroup):
     waiting_for_lang = State()
     waiting_for_role = State()        
     waiting_for_from_city = State()
     waiting_for_to_city = State()
     waiting_for_passengers = State()
-    waiting_for_weight = State()      # Dastafka uchun yuk og'irligi
+    waiting_for_weight = State()      
     waiting_for_price = State()
     waiting_for_contact = State()
     waiting_for_location = State()
@@ -216,7 +215,6 @@ async def select_to_city(message: types.Message, state: FSMContext):
         await state.set_state(BookingState.waiting_for_passengers)
         await show_passenger_menu(message, [], lang)
     else:
-        # Dastafka uchun yuk og'irligini so'rash
         await state.set_state(BookingState.waiting_for_weight)
         builder = ReplyKeyboardBuilder()
         builder.button(text="🔙 Orqaga" if lang == "uz" else "🔙 Назад")
@@ -327,7 +325,7 @@ async def get_contact(message: types.Message, state: FSMContext):
 
     await state.set_state(BookingState.waiting_for_location)
     builder = ReplyKeyboardBuilder()
-    builder.button(text="📍 Jonli lokatsiyani yuborish" if message.text else "📍 Jonli lokatsiyani yuborish", request_location=True)
+    builder.button(text="📍 Jonli lokatsiyani yuborish", request_location=True)
     builder.button(text="🔙 Orqaga")
     builder.adjust(1, 1)
 
@@ -386,7 +384,8 @@ async def get_comment(message: types.Message, state: FSMContext):
         pass_summary = " ".join(data.get('passengers', []))
         o_type_str = "🚖 Yo'lovchi"
     else:
-        pass_summary = f"Og'irlik: {data.get('weight', 'Ko\'rsatilmagan')}"
+        weight_val = data.get('weight', 'Korsatilmagan')
+        pass_summary = f"Og'irlik: {weight_val}"
         o_type_str = "📦 Dastafka"
 
     ORDERS[order_id] = {
@@ -879,74 +878,4 @@ async def handle_driver_app(request):
                 driverData.balance -= 3000;
                 localStorage.setItem('safar_driver', JSON.stringify(driverData));
                 
-                openedOrders.push(orderId);
-                localStorage.setItem('opened_orders', JSON.stringify(openedOrders));
-
-                document.getElementById('p_balance').innerText = driverData.balance;
-                document.getElementById('b_balance').innerText = driverData.balance;
-
-                alert("✅ Raqam ochildi!");
-                loadOrders();
-            }}
-        }}
-
-        function switchTab(tabNum) {{
-            document.querySelectorAll('#dashboardApp .tab-content').forEach(el => el.classList.remove('active'));
-            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-
-            if(tabNum === 1) document.getElementById('tab1').classList.add('active');
-            if(tabNum === 2) document.getElementById('tab2').classList.add('active');
-            if(tabNum === 3) {{
-                document.getElementById('tab3').classList.add('active');
-                loadOrders();
-            }}
-            if(tabNum === 4) document.getElementById('tab4').classList.add('active');
-
-            document.querySelectorAll('.nav-item')[tabNum - 1].classList.add('active');
-        }}
-
-        function clearData() {{
-            if (confirm("Ma'lumotlarni o'chirib, qayta ro'yxatdan o'tasizmi?")) {{
-                localStorage.removeItem('safar_driver');
-                localStorage.removeItem('opened_orders');
-                location.reload();
-            }}
-        }}
-
-        function topUp(amount) {{
-            let data = JSON.parse(localStorage.getItem('safar_driver'));
-            if(!data) return;
-            data.balance += amount;
-            localStorage.setItem('safar_driver', JSON.stringify(data));
-            document.getElementById('p_balance').innerText = data.balance;
-            document.getElementById('b_balance').innerText = data.balance;
-            alert("✅ Balans muvaffaqiyatli to'ldirildi!");
-        }}
-    </script>
-</body>
-</html>
-"""
-    return web.Response(text=html_content, content_type='text/html')
-
-async def handle_home(request):
-    return web.Response(text="Safar Taxi Bot ishlamoqda!")
-
-async def web_server():
-    app = web.Application()
-    app.router.add_get("/", handle_home)
-    app.router.add_get("/driver-app", handle_driver_app)
-    app.router.add_get("/api/orders", handle_get_orders)
-
-    runner = web.AppRunner(app)
-    await runner.setup()
-    port = int(os.environ.get("PORT", 10000))
-    site = web.TCPSite(runner, "0.0.0.0", port)
-    await site.start()
-
-async def main():
-    logging.basicConfig(level=logging.INFO)
-    print("Bot va Mini App ishga tushdi...")
-    await asyncio.gather(web_server(), dp.start_polling(bot))
-
-if __name__ == "__main__":
-    asyncio.run(main())
+                openedOrders.push(
