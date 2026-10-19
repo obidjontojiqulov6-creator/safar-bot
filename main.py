@@ -21,7 +21,7 @@ ALL_USERS = set()
 DAILY_VISITS = set()
 LAST_VISIT_DATE = datetime.now().date()
 
-ADMIN_ID = 123456789  # O'zingizning Telegram ID raqamingiz
+ADMIN_ID = 123456789  # Telegram ID raqamingiz
 
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -80,39 +80,6 @@ async def cmd_start(message: types.Message, state: FSMContext):
     )
     
     await message.answer(welcome_text, reply_markup=builder.as_markup(resize_keyboard=True))
-
-@dp.message(F.text == "👑 Admin paneli")
-async def admin_panel(message: types.Message):
-    if message.from_user.id != ADMIN_ID:
-        return await message.answer("Sizda bu bo'limga kirish huquqi yo'q.")
-    
-    total_users = len(ALL_USERS)
-    today_active = len(DAILY_VISITS)
-    total_orders = len(ORDERS)
-    total_drivers = len(DRIVERS)
-
-    text = (
-        f"👑 **Admin paneli**\n\n"
-        f"👥 Jami foydalanuvchilar: **{total_users} ta**\n"
-        f"📅 Bugun kirganlar: **{today_active} ta**\n"
-        f"📋 Faol buyurtmalar: **{total_orders} ta**\n"
-        f"🚖 Ro'yxatdan o'tgan haydovchilar: **{total_drivers} ta**"
-    )
-    
-    builder = ReplyKeyboardBuilder()
-    builder.button(text="🔄 Statistikani yangilash")
-    builder.button(text="🏠 Asosiy menyu")
-    builder.adjust(1, 1)
-    
-    await message.answer(text, reply_markup=builder.as_markup(resize_keyboard=True), parse_mode="Markdown")
-
-@dp.message(F.text == "🔄 Statistikani yangilash")
-async def refresh_stats(message: types.Message):
-    await admin_panel(message)
-
-@dp.message(F.text.in_(["🏠 Asosiy menyu", "🏠 Главное меню"]))
-async def back_to_main(message: types.Message, state: FSMContext):
-    await cmd_start(message, state)
 
 @dp.message(BookingState.waiting_for_lang, F.text.in_(["🇺🇿 O'zbekcha", "🇷🇺 Русский"]))
 async def select_language(message: types.Message, state: FSMContext):
@@ -181,261 +148,12 @@ async def handle_web_app_data(message: types.Message):
         driver_id = message.from_user.id
         DRIVERS[driver_id] = data
         lang = data.get("lang", "uz")
-        msg = "✅ Ma'lumotlaringiz muvaffaqiyatli saqlandi!" if lang == "uz" else "✅ Ваши данные успешно сохранены!"
+        msg = "✅ Ma'lumotlaringiz saqlandi!" if lang == "uz" else "✅ Ваши данные сохранены!"
         await message.answer(msg)
     except Exception:
         await message.answer("❌ Xatolik yuz berdi.")
 
-@dp.message(BookingState.waiting_for_from_city)
-async def select_from_city(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-    lang = data.get("lang", "uz")
-    cities = CITIES_UZ if lang == "uz" else CITIES_RU
-    
-    if message.text not in cities:
-        return await message.answer("Iltimos, tugmalardagi hududlardan birini tanlang.")
-
-    await state.update_data(from_city=message.text)
-    await state.set_state(BookingState.waiting_for_to_city)
-
-    builder = ReplyKeyboardBuilder()
-    for city in cities:
-        if city != message.text:
-            builder.button(text=city)
-    builder.button(text="🔙 Orqaga" if lang == "uz" else "🔙 Назад")
-    builder.adjust(2, 2, 2, 2, 2, 2, 1)
-
-    text = f"🏁 Qayerga borasiz? (Jo'nash: {message.text})" if lang == "uz" else f"🏁 Куда едем? (Откуда: {message.text})"
-    await message.answer(text, reply_markup=builder.as_markup(resize_keyboard=True))
-
-@dp.message(BookingState.waiting_for_to_city)
-async def select_to_city(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-    lang = data.get("lang", "uz")
-    cities = CITIES_UZ if lang == "uz" else CITIES_RU
-
-    if message.text in ["🔙 Orqaga", "🔙 Назад"]:
-        await state.set_state(BookingState.waiting_for_from_city)
-        builder = ReplyKeyboardBuilder()
-        for city in cities:
-            if city != data.get("from_city"):
-                builder.button(text=city)
-        builder.adjust(2, 2, 2, 2, 2, 2)
-        return await message.answer("📍 Qayerdan jo'naysiz?", reply_markup=builder.as_markup(resize_keyboard=True))
-
-    if message.text not in cities:
-        return await message.answer("Iltimos, ro'yxatdagi hududlardan birini tanlang.")
-
-    await state.update_data(to_city=message.text, passengers=[])
-    await state.set_state(BookingState.waiting_for_passengers)
-    await show_passenger_menu(message, [], lang)
-
-async def show_passenger_menu(message: types.Message, passengers: list, lang: str):
-    builder = ReplyKeyboardBuilder()
-    if lang == "uz":
-        builder.button(text="👨 Erkak")
-        builder.button(text="👩 Ayol")
-        builder.button(text="🔄 Tozalash")
-        builder.button(text="➡️ Keyingi bo'lim")
-        builder.button(text="🔙 Orqaga")
-        pass_str = " ".join(passengers) if passengers else "(Hali tanlanmadi)"
-        text = f"👥 Yo'lovchilar tarkibini tanlang (Maksimal: 4 ta):\nJoriy: {pass_str}"
-    else:
-        builder.button(text="👨 Мужчина")
-        builder.button(text="👩 Женщина")
-        builder.button(text="🔄 Очистить")
-        builder.button(text="➡️ Следующий раздел")
-        builder.button(text="🔙 Назад")
-        pass_str = " ".join(passengers) if passengers else "(Еще не выбрано)"
-        text = f"👥 Выберите состав пассажиров (Максимум: 4):\nТекущие: {pass_str}"
-        
-    builder.adjust(2, 2, 1)
-    await message.answer(text, reply_markup=builder.as_markup(resize_keyboard=True))
-
-@dp.message(BookingState.waiting_for_passengers)
-async def handle_passengers(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-    lang = data.get("lang", "uz")
-    passengers = data.get("passengers", [])
-    text = message.text
-
-    if text in ["🔙 Orqaga", "🔙 Назад"]:
-        await state.set_state(BookingState.waiting_for_to_city)
-        return await message.answer("🏁 Qayerga borasiz?")
-
-    if text in ["🔄 Tozalash", "🔄 Очистить"]:
-        passengers = []
-        await state.update_data(passengers=passengers)
-        return await show_passenger_menu(message, passengers, lang)
-
-    if text in ["➡️ Keyingi bo'lim", "➡️ Следующий раздел"]:
-        if not passengers:
-            return await message.answer("Iltimos, kamida 1 ta yo'lovchini tanlang!")
-        
-        await state.set_state(BookingState.waiting_for_price)
-        builder = ReplyKeyboardBuilder()
-        builder.button(text="🔙 Orqaga" if lang == "uz" else "🔙 Назад")
-        builder.adjust(1)
-        return await message.answer("💵 Yo'lkira uchun bermoqchi bo'lgan summangizni kiriting:", reply_markup=builder.as_markup(resize_keyboard=True), parse_mode="Markdown")
-
-    if text in ["👨 Erkak", "👨 Мужчина", "👩 Ayol", "👩 Женщина"]:
-        if len(passengers) >= 4:
-            return await message.answer("⚠️ Maksimal 4 ta yo'lovchi tanlash mumkin!")
-        emoji = "👨" if "Erkak" in text or "Мужчина" in text else "👩"
-        passengers.append(emoji)
-        await state.update_data(passengers=passengers)
-        return await show_passenger_menu(message, passengers, lang)
-
-@dp.message(BookingState.waiting_for_price)
-async def enter_price(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-    lang = data.get("lang", "uz")
-
-    if message.text in ["🔙 Orqaga", "🔙 Назад"]:
-        await state.set_state(BookingState.waiting_for_passengers)
-        return await show_passenger_menu(message, data.get("passengers", []), lang)
-
-    await state.update_data(price=message.text)
-    await state.set_state(BookingState.waiting_for_contact)
-
-    builder = ReplyKeyboardBuilder()
-    builder.button(text="📱 Kontaktni yuborish" if lang == "uz" else "📱 Отправить контакт", request_contact=True)
-    builder.button(text="🔙 Orqaga" if lang == "uz" else "🔙 Назад")
-    builder.adjust(1, 1)
-
-    await message.answer("📞 Iltimos, aloqa uchun telefon raqamingizni yuboring:", reply_markup=builder.as_markup(resize_keyboard=True), parse_mode="Markdown")
-
-@dp.message(BookingState.waiting_for_contact, F.contact)
-async def get_contact(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-    lang = data.get("lang", "uz")
-    phone = message.contact.phone_number
-    await state.update_data(phone=phone)
-
-    await state.set_state(BookingState.waiting_for_location)
-    builder = ReplyKeyboardBuilder()
-    builder.button(text="📍 Jonli lokatsiyani yuborish" if lang == "uz" else "📍 Отправить живую локацию", request_location=True)
-    builder.button(text="🔙 Orqaga" if lang == "uz" else "🔙 Назад")
-    builder.adjust(1, 1)
-
-    await message.answer("📍 Iltimos, turgan joyingizni **jonli lokatsiya** orqali yuboring:", reply_markup=builder.as_markup(resize_keyboard=True), parse_mode="Markdown")
-
-@dp.message(BookingState.waiting_for_contact)
-async def wrong_contact(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-    lang = data.get("lang", "uz")
-    if message.text in ["🔙 Orqaga", "🔙 Назад"]:
-        await state.set_state(BookingState.waiting_for_price)
-        return await message.answer("💵 Summani qaytadan kiriting:")
-    await message.answer("⚠️ Iltimos, pastdagi 'Kontaktni yuborish' tugmasini bosing!")
-
-@dp.message(BookingState.waiting_for_location, F.location)
-async def get_location(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-    lang = data.get("lang", "uz")
-    
-    lat = message.location.latitude
-    lon = message.location.longitude
-    await state.update_data(lat=lat, lon=lon)
-
-    await state.set_state(BookingState.waiting_for_comment)
-    builder = ReplyKeyboardBuilder()
-    builder.button(text="⏭️ O'tkazib yuborish" if lang == "uz" else "⏭️ Пропустить")
-    builder.button(text="🔙 Orqaga" if lang == "uz" else "🔙 Назад")
-    builder.adjust(1, 1)
-
-    await message.answer(
-        "📝 Haydovchiga qo'shimcha ma'lumot yozib qoldiring. Agar yo'q bo'lsa, **'O'tkazib yuborish'** tugmasini bosing:",
-        reply_markup=builder.as_markup(resize_keyboard=True),
-        parse_mode="Markdown"
-    )
-
-@dp.message(BookingState.waiting_for_location)
-async def wrong_location(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-    lang = data.get("lang", "uz")
-    if message.text in ["🔙 Orqaga", "🔙 Назад"]:
-        await state.set_state(BookingState.waiting_for_contact)
-        return await message.answer("📞 Telefon raqamingizni qaytadan yuboring:")
-    await message.answer("⚠️ Iltimos, 'Jonli lokatsiyani yuborish' tugmasini bosing!")
-
-@dp.message(BookingState.waiting_for_comment)
-async def get_comment(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-    lang = data.get("lang", "uz")
-    text = message.text
-
-    if text in ["🔙 Orqaga", "🔙 Назад"]:
-        await state.set_state(BookingState.waiting_for_location)
-        builder = ReplyKeyboardBuilder()
-        builder.button(text="📍 Jonli lokatsiyani yuborish", request_location=True)
-        builder.button(text="🔙 Orqaga")
-        builder.adjust(1, 1)
-        return await message.answer("📍 Lokatsiyani qaytadan yuboring:", reply_markup=builder.as_markup(resize_keyboard=True))
-
-    comment = "" if text in ["⏭️ O'tkazib yuborish", "⏭️ Пропустить"] else text
-    name = message.from_user.first_name
-    pass_summary = " ".join(data.get('passengers', []))
-
-    order_id = str(len(ORDERS) + 1)
-    ORDERS[order_id] = {
-        "user_id": message.from_user.id,
-        "name": name,
-        "from_city": data.get('from_city'),
-        "to_city": data.get('to_city'),
-        "passengers": pass_summary,
-        "price": data.get('price'),
-        "phone": data.get('phone'),
-        "lat": data.get('lat'),
-        "lon": data.get('lon'),
-        "comment": comment if comment else ("Yo'q" if lang == "uz" else "Нет")
-    }
-
-    if lang == "uz":
-        response_text = (
-            f"Rahmat, {name}! Buyurtmangiz qabul qilindi ✅\n\n"
-            f"📋 **Buyurtma tafsilotlari:**\n"
-            f"📍 Qayerdan: {data.get('from_city')}\n"
-            f"🏁 Qayerga: {data.get('to_city')}\n"
-            f"👥 Odamlar: {pass_summary}\n"
-            f"💵 Narx: {data.get('price')}\n"
-            f"📞 Tel: `+{data.get('phone')}`\n"
-            f"💬 Qo'shimcha: {ORDERS[order_id]['comment']}"
-        )
-        canc_btn = "❌ Buyurtmani bekor qilish"
-    else:
-        response_text = (
-            f"Спасибо, {name}! Ваш заказ принят ✅\n\n"
-            f"📋 **Детали заказа:**\n"
-            f"📍 Откуда: {data.get('from_city')}\n"
-            f"🏁 Куда: {data.get('to_city')}\n"
-            f"👥 Пассажиры: {pass_summary}\n"
-            f"💵 Цена: {data.get('price')}\n"
-            f"📞 Телефон: `+{data.get('phone')}`\n"
-            f"💬 Доп. инфо: {ORDERS[order_id]['comment']}"
-        )
-        canc_btn = "❌ Отменить заказ"
-
-    inline_builder = InlineKeyboardBuilder()
-    inline_builder.button(text=canc_btn, callback_data=f"cancel_order_{order_id}")
-
-    await message.answer(response_text, reply_markup=inline_builder.as_markup(), parse_mode="Markdown")
-    await state.clear()
-
-@dp.callback_query(F.data.startswith("cancel_order_"))
-async def cancel_order_callback(callback: types.CallbackQuery, state: FSMContext):
-    order_id = callback.data.split("_")[2]
-    if order_id in ORDERS:
-        del ORDERS[order_id]
-
-    await callback.answer("Buyurtma bekor qilindi!")
-    await callback.message.edit_text("❌ Buyurtma bekor qilindi.")
-    await cmd_start(callback.message, state)
-
-@dp.message()
-async def echo_text(message: types.Message, state: FSMContext):
-    await cmd_start(message, state)
-
+# Rasm yuklash Endpoint
 async def handle_upload(request):
     reader = await request.multipart()
     field = await reader.next()
@@ -455,6 +173,7 @@ async def handle_upload(request):
     file_url = f"{request.scheme}://{request.host}/uploads/{filename}"
     return web.json_response({"url": file_url})
 
+# Mini App HTML
 async def handle_driver_app(request):
     lang = request.query.get("lang", "uz")
     cities = CITIES_UZ if lang == "uz" else CITIES_RU
@@ -495,6 +214,7 @@ async def handle_driver_app(request):
         nav2 = "Yo'nalish"
         nav3 = "Yo'lovchilar"
         nav4 = "Balans"
+        reset_btn = "🔄 Ma'lumotlarni o'chirish va noldan boshlash"
     else:
         t_reg = "Анкета Водителя"
         l_name = "Имя и Фамилия:"
@@ -530,6 +250,7 @@ async def handle_driver_app(request):
         nav2 = "Маршрут"
         nav3 = "Пассажиры"
         nav4 = "Баланс"
+        reset_btn = "🔄 Сбросить данные и начать заново"
 
     html_content = f"""<!DOCTYPE html>
 <html lang="{lang}">
@@ -546,7 +267,7 @@ async def handle_driver_app(request):
             margin: 0; padding-bottom: 70px;
         }}
         .tab-content {{ display: none; padding: 16px; }}
-        .tab-content.active {{ display: block; }}
+        .tab-content.active {{ display: block !important; }}
         
         .nav-bar {{
             position: fixed; bottom: 0; left: 0; width: 100%;
@@ -580,6 +301,10 @@ async def handle_driver_app(request):
             color: var(--tg-theme-button-text-color, #fff); border: none;
             padding: 12px; border-radius: 10px; font-size: 15px; font-weight: bold;
             cursor: pointer; margin-top: 16px;
+        }}
+        .reset-btn {{
+            background-color: #e74c3c !important;
+            margin-top: 20px;
         }}
         .profile-img {{ width: 90px; height: 90px; border-radius: 50%; object-fit: cover; display: block; margin: 0 auto 12px auto; border: 2px solid #0088cc; }}
         .car-big-img {{ width: 100%; height: 180px; border-radius: 10px; object-fit: cover; margin-top: 12px; display: block; }}
@@ -635,6 +360,8 @@ async def handle_driver_app(request):
                 
                 <label><b>Mashina (Oldi ko'rinishi):</b></label>
                 <img id="p_car1" class="car-big-img" src="" alt="Mashina">
+
+                <button type="button" class="reset-btn" onclick="clearData()">{reset_btn}</button>
             </div>
         </div>
 
@@ -722,13 +449,22 @@ async def handle_driver_app(request):
         let tg = window.Telegram.WebApp;
         tg.expand();
 
-        let driverData = localStorage.getItem('safar_driver');
-
-        if (driverData) {{
-            showDashboard(JSON.parse(driverData));
-        }} else {{
+        function initApp() {{
+            let driverData = localStorage.getItem('safar_driver');
+            if (driverData) {{
+                try {{
+                    let parsed = JSON.parse(driverData);
+                    if (parsed && parsed.name) {{
+                        showDashboard(parsed);
+                        return;
+                    }}
+                }} catch(e) {{}}
+            }}
             document.getElementById('registerScreen').classList.add('active');
+            document.getElementById('dashboardApp').style.display = 'none';
         }}
+
+        initApp();
 
         async function uploadImage(inputId, hiddenId) {{
             let fileInput = document.getElementById(inputId);
@@ -752,7 +488,7 @@ async def handle_driver_app(request):
                     loadingEl.innerText = "✅ Yuklandi!";
                     loadingEl.style.color = "green";
                 }} else {{
-                    alert("Xatolik yuz berdi!");
+                    alert("Xatolik!");
                     loadingEl.style.display = 'none';
                 }}
             }} catch (err) {{
@@ -767,7 +503,7 @@ async def handle_driver_app(request):
             let cPhoto1 = document.getElementById('reg_car_photo1').value;
 
             if (!pPhoto || !cPhoto1) {{
-                alert("Iltimos, barcha rasmlar yuklanishini kuting!");
+                alert("Iltimos, rasmlar yuklanishini kuting!");
                 return;
             }}
 
@@ -793,22 +529,8 @@ async def handle_driver_app(request):
             showDashboard(data);
         }});
 
-        document.getElementById('settingsForm').addEventListener('submit', function(e) {{
-            e.preventDefault();
-            let data = JSON.parse(localStorage.getItem('safar_driver'));
-            data.from_city = document.getElementById('set_from').value;
-            data.to_city = document.getElementById('set_to').value;
-            data.passengers_count = document.getElementById('set_passengers').value;
-            data.work_mode = document.getElementById('set_work_mode').value;
-            data.min_price = document.getElementById('set_min_price').value;
-            data.max_price = document.getElementById('set_max_price').value;
-
-            localStorage.setItem('safar_driver', JSON.stringify(data));
-            tg.sendData(JSON.stringify(data));
-            alert("Saqlandi!");
-        }});
-
         function showDashboard(data) {{
+            document.getElementById('registerScreen').classList.remove('active');
             document.getElementById('registerScreen').style.display = 'none';
             document.getElementById('dashboardApp').style.display = 'block';
 
@@ -821,16 +543,11 @@ async def handle_driver_app(request):
             document.getElementById('b_balance').innerText = data.balance;
             document.getElementById('p_car1').src = data.car_photo1;
 
-            document.getElementById('set_from').value = data.from_city;
-            document.getElementById('set_to').value = data.to_city;
-            document.getElementById('set_passengers').value = data.passengers_count;
-            document.getElementById('set_work_mode').value = data.work_mode || "{mode_1}";
-            document.getElementById('set_min_price').value = data.min_price;
-            document.getElementById('set_max_price').value = data.max_price;
+            switchTab(1);
         }}
 
         function switchTab(tabNum) {{
-            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('#dashboardApp .tab-content').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
 
             if(tabNum === 1) document.getElementById('tab1').classList.add('active');
@@ -839,6 +556,13 @@ async def handle_driver_app(request):
             if(tabNum === 4) document.getElementById('tab4').classList.add('active');
 
             document.querySelectorAll('.nav-item')[tabNum - 1].classList.add('active');
+        }}
+
+        function clearData() {{
+            if (confirm("Haqiqatan ham ma'lumotlarni o'chirib, noldan ro'yxatdan o'tmoqchimisiz?")) {{
+                localStorage.removeItem('safar_driver');
+                location.reload();
+            }}
         }}
 
         function topUp(amount) {{
@@ -856,7 +580,7 @@ async def handle_driver_app(request):
     return web.Response(text=html_content, content_type='text/html')
 
 async def handle_home(request):
-    return web.Response(text="Safar Taxi Bot va Mini App ishlamoqda!")
+    return web.Response(text="Safar Taxi Bot ishlamoqda!")
 
 async def web_server():
     app = web.Application()
@@ -873,7 +597,7 @@ async def web_server():
 
 async def main():
     logging.basicConfig(level=logging.INFO)
-    print("Bot va Haydovchi Mini App ishga tushdi...")
+    print("Bot va Mini App ishga tushdi...")
     await asyncio.gather(web_server(), dp.start_polling(bot))
 
 if __name__ == "__main__":
