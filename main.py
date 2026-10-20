@@ -374,7 +374,6 @@ async def get_contact_obj(message: types.Message, state: FSMContext):
 @dp.message(BookingState.waiting_for_contact)
 async def wrong_contact(message: types.Message, state: FSMContext):
     data = await state.get_data()
-    lang = data.get("lang", "uz")
     if message.contact:
         phone = message.contact.phone_number
         await state.update_data(phone=phone)
@@ -384,7 +383,6 @@ async def wrong_contact(message: types.Message, state: FSMContext):
 
 async def ask_location_step(message: types.Message, state: FSMContext):
     data = await state.get_data()
-    lang = data.get("lang", "uz")
 
     await state.set_state(BookingState.waiting_for_location)
     builder = ReplyKeyboardBuilder()
