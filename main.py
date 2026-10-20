@@ -324,7 +324,7 @@ async def enter_price(message: types.Message, state: FSMContext):
     await state.set_state(BookingState.waiting_for_contact)
 
     builder = ReplyKeyboardBuilder()
-    builder.button(text="📱 Kontaktni yuborish" if lang == "uz" else "📱 Отправить kontakt", request_contact=True)
+    builder.button(text="📱 Kontaktni yuborish" if lang == "uz" else "📱 Отправить контакт", request_contact=True)
     builder.button(text="🔙 Orqaga" if lang == "uz" else "🔙 Назад")
     builder.adjust(1, 1)
 
@@ -512,9 +512,7 @@ async def handle_driver_app(request):
             background-color: #e74c3c !important;
             margin-top: 20px;
         }
-        .profile-img { width: 90px; height: 90px; border-radius: 50%; object-fit: cover; display: block; margin: 0 auto 12px auto; border: 2px solid #0088cc; }
-        .car-big-img { width: 100%; height: 180px; border-radius: 10px; object-fit: cover; margin-top: 12px; display: block; }
-        .status-msg { font-size: 12px; color: green; display: none; margin-top: 4px; font-weight: bold; }
+        .profile-img { width: 90px; height: 90px; border-radius: 50%; object-fit: cover; display: block; margin: 0 auto 12px auto; background: #0088cc; color: #fff; text-align: center; line-height: 90px; font-size: 32px; font-weight: bold; }
 
         .order-card {
             border-left: 4px solid #0088cc; padding: 12px;
@@ -535,14 +533,9 @@ async def handle_driver_app(request):
     <div id="registerScreen" class="tab-content active">
         <div class="card">
             <h2>🚖 Haydovchi Anketasi</h2>
-            <!-- Formning submit hodisasini JS orqali boshqaramiz -->
             <form id="regForm">
                 <label>Ism va Familiya:</label>
                 <input type="text" id="reg_name" required placeholder="Sardor Rahimov">
-
-                <label>Profil rasmini tanlash:</label>
-                <input type="file" id="file_profile" accept="image/*" required>
-                <div id="status_profile" class="status-msg">✅ Rasm tanlandi!</div>
 
                 <label>Telefon raqam:</label>
                 <input type="tel" id="reg_phone" required placeholder="+998901234567">
@@ -553,11 +546,6 @@ async def handle_driver_app(request):
                 <label>Avtomobil davlat raqami:</label>
                 <input type="text" id="reg_car_plate" required placeholder="01 A 777 AA">
 
-                <label>Mashina oldi tomoni rasmini tanlash:</label>
-                <input type="file" id="file_car1" accept="image/*" required>
-                <div id="status_car1" class="status-msg">✅ Rasm tanlandi!</div>
-
-                <!-- Oddiy tugma ishlatamiz, form submit bo'lmasligi uchun -->
                 <button type="button" id="realSubmitBtn">Ro'yxatdan o'tish</button>
             </form>
         </div>
@@ -570,14 +558,11 @@ async def handle_driver_app(request):
         <div id="tab1" class="tab-content">
             <div class="card">
                 <h2>👤 Mening Profilim</h2>
-                <img id="p_img" class="profile-img" src="" alt="Profil">
+                <div id="p_img" class="profile-img">🚖</div>
                 <p><b>👤 Ism:</b> <span id="p_name"></span></p>
                 <p><b>📞 Tel:</b> <span id="p_phone"></span></p>
                 <p><b>🚗 Mashina:</b> <span id="p_car"></span> (<span id="p_plate"></span>)</p>
                 <p><b>💳 Balans:</b> <span id="p_balance"></span> so'm</p>
-                
-                <label><b>Mashina (Oldi ko'rinishi):</b></label>
-                <img id="p_car1" class="car-big-img" src="" alt="Mashina">
 
                 <button type="button" class="reset-btn" onclick="clearData()">🔄 Ma'lumotlarni o'chirish va noldan boshlash</button>
             </div>
@@ -689,63 +674,22 @@ async def handle_driver_app(request):
 
         initApp();
 
-        // Fayl tanlanganda status yozish
-        document.getElementById('file_profile').addEventListener('change', function() {
-            if(this.files && this.files[0]) {
-                document.getElementById('status_profile').style.display = 'block';
-            }
-        });
-        document.getElementById('file_car1').addEventListener('change', function() {
-            if(this.files && this.files[0]) {
-                document.getElementById('status_car1').style.display = 'block';
-            }
-        });
+        document.getElementById('realSubmitBtn').addEventListener('click', function() {
+            let name = document.getElementById('reg_name').value.trim();
+            let phone = document.getElementById('reg_phone').value.trim();
+            let carModel = document.getElementById('reg_car_model').value.trim();
+            let carPlate = document.getElementById('reg_car_plate').value.trim();
 
-        // Ro'yxatdan o'tish tugmasi JS orqali
-        document.getElementById('realSubmitBtn').addEventListener('click', function(e) {
-            // Form validatsiyasini tekshirish
-            let form = document.getElementById('regForm');
-            if(!form.checkValidity()) {
-                alert("Iltimos, barcha majburiy maydonlarni to'ldiring va rasmlarni tanlang!");
+            if (!name || !phone || !carModel || !carPlate) {
+                alert("Iltimos, barcha maydonlarni to'ldiring!");
                 return;
             }
 
-            let profileFile = document.getElementById('file_profile').files[0];
-            let carFile = document.getElementById('file_car1').files[0];
-
-            // Fayllarni o'qish (sinxron emas, asinxron)
-            let readersLoaded = 0;
-            let profileBase64 = "https://via.placeholder.com/90";
-            let carBase64 = "https://via.placeholder.com/300x180";
-
-            function checkAllReady() {
-                readersLoaded++;
-                if(readersLoaded >= 2) {
-                    finalizeSubmit(profileBase64, carBase64);
-                }
-            }
-
-            if(profileFile) {
-                let r1 = new FileReader();
-                r1.onload = function(ev) { profileBase64 = ev.target.result; checkAllReady(); };
-                r1.readAsDataURL(profileFile);
-            } else { checkAllReady(); }
-
-            if(carFile) {
-                let r2 = new FileReader();
-                r2.onload = function(ev) { carBase64 = ev.target.result; checkAllReady(); };
-                r2.readAsDataURL(carFile);
-            } else { checkAllReady(); }
-        });
-
-        function finalizeSubmit(pPhoto, cPhoto1) {
             let data = {
-                name: document.getElementById('reg_name').value,
-                profile_photo: pPhoto,
-                phone: document.getElementById('reg_phone').value,
-                car_model: document.getElementById('reg_car_model').value,
-                car_plate: document.getElementById('reg_car_plate').value,
-                car_photo1: cPhoto1,
+                name: name,
+                phone: phone,
+                car_model: carModel,
+                car_plate: carPlate,
                 from_city: "Toshkent",
                 to_city: "Buxoro",
                 passengers_count: 4,
@@ -758,7 +702,7 @@ async def handle_driver_app(request):
             localStorage.setItem('safar_driver', JSON.stringify(data));
             try { tg.sendData(JSON.stringify(data)); } catch(err) {}
             showDashboard(data);
-        }
+        });
 
         document.getElementById('settingsForm').addEventListener('submit', function(e) {
             e.preventDefault();
@@ -783,14 +727,13 @@ async def handle_driver_app(request):
             document.getElementById('registerScreen').classList.remove('active');
             document.getElementById('dashboardApp').style.display = 'block';
 
-            document.getElementById('p_img').src = data.profile_photo || '';
+            document.getElementById('p_img').innerText = (data.name ? data.name.charAt(0).toUpperCase() : "🚖");
             document.getElementById('p_name').innerText = data.name || '';
             document.getElementById('p_phone').innerText = data.phone || '';
             document.getElementById('p_car').innerText = data.car_model || '';
             document.getElementById('p_plate').innerText = data.car_plate || '';
             document.getElementById('p_balance').innerText = data.balance || 0;
             document.getElementById('b_balance').innerText = data.balance || 0;
-            document.getElementById('p_car1').src = data.car_photo1 || '';
 
             document.getElementById('set_from').value = data.from_city || "Toshkent";
             document.getElementById('set_to').value = data.to_city || "Buxoro";
