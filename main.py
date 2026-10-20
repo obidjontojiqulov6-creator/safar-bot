@@ -324,7 +324,7 @@ async def enter_price(message: types.Message, state: FSMContext):
     await state.set_state(BookingState.waiting_for_contact)
 
     builder = ReplyKeyboardBuilder()
-    builder.button(text="📱 Kontaktni yuborish" if lang == "uz" else "📱 Отправить контакт", request_contact=True)
+    builder.button(text="📱 Kontaktni yuborish" if lang == "uz" else "📱 Отправить kontakt", request_contact=True)
     builder.button(text="🔙 Orqaga" if lang == "uz" else "🔙 Назад")
     builder.adjust(1, 1)
 
@@ -535,13 +535,13 @@ async def handle_driver_app(request):
     <div id="registerScreen" class="tab-content active">
         <div class="card">
             <h2>🚖 Haydovchi Anketasi</h2>
+            <!-- Formning submit hodisasini JS orqali boshqaramiz -->
             <form id="regForm">
                 <label>Ism va Familiya:</label>
                 <input type="text" id="reg_name" required placeholder="Sardor Rahimov">
 
                 <label>Profil rasmini tanlash:</label>
-                <input type="file" id="file_profile" accept="image/*" required onchange="processFile('file_profile', 'reg_profile_photo', 'status_profile')">
-                <input type="hidden" id="reg_profile_photo">
+                <input type="file" id="file_profile" accept="image/*" required>
                 <div id="status_profile" class="status-msg">✅ Rasm tanlandi!</div>
 
                 <label>Telefon raqam:</label>
@@ -554,11 +554,11 @@ async def handle_driver_app(request):
                 <input type="text" id="reg_car_plate" required placeholder="01 A 777 AA">
 
                 <label>Mashina oldi tomoni rasmini tanlash:</label>
-                <input type="file" id="file_car1" accept="image/*" required onchange="processFile('file_car1', 'reg_car_photo1', 'status_car1')">
-                <input type="hidden" id="reg_car_photo1">
+                <input type="file" id="file_car1" accept="image/*" required>
                 <div id="status_car1" class="status-msg">✅ Rasm tanlandi!</div>
 
-                <button type="submit" id="submitBtn">Ro'yxatdan o'tish</button>
+                <!-- Oddiy tugma ishlatamiz, form submit bo'lmasligi uchun -->
+                <button type="button" id="realSubmitBtn">Ro'yxatdan o'tish</button>
             </form>
         </div>
     </div>
@@ -689,29 +689,56 @@ async def handle_driver_app(request):
 
         initApp();
 
-        function processFile(inputId, hiddenId, statusId) {
-            let fileInput = document.getElementById(inputId);
-            let file = fileInput.files[0];
-            if (!file) return;
+        // Fayl tanlanganda status yozish
+        document.getElementById('file_profile').addEventListener('change', function() {
+            if(this.files && this.files[0]) {
+                document.getElementById('status_profile').style.display = 'block';
+            }
+        });
+        document.getElementById('file_car1').addEventListener('change', function() {
+            if(this.files && this.files[0]) {
+                document.getElementById('status_car1').style.display = 'block';
+            }
+        });
 
-            let reader = new FileReader();
-            reader.onload = function(e) {
-                document.getElementById(hiddenId).value = e.target.result;
-                document.getElementById(statusId).style.display = 'block';
-            };
-            reader.readAsDataURL(file);
-        }
+        // Ro'yxatdan o'tish tugmasi JS orqali
+        document.getElementById('realSubmitBtn').addEventListener('click', function(e) {
+            // Form validatsiyasini tekshirish
+            let form = document.getElementById('regForm');
+            if(!form.checkValidity()) {
+                alert("Iltimos, barcha majburiy maydonlarni to'ldiring va rasmlarni tanlang!");
+                return;
+            }
 
-        document.getElementById('regForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            let pPhoto = document.getElementById('reg_profile_photo').value;
-            let cPhoto1 = document.getElementById('reg_car_photo1').value;
+            let profileFile = document.getElementById('file_profile').files[0];
+            let carFile = document.getElementById('file_car1').files[0];
 
-            // Agar rasm hali FileReader orqali o'qib bo'lmagan bo'lsa, vaqtinchalik standart rasm beramiz
-            if (!pPhoto) pPhoto = "https://via.placeholder.com/90";
-            if (!cPhoto1) cPhoto1 = "https://via.placeholder.com/300x180";
+            // Fayllarni o'qish (sinxron emas, asinxron)
+            let readersLoaded = 0;
+            let profileBase64 = "https://via.placeholder.com/90";
+            let carBase64 = "https://via.placeholder.com/300x180";
 
+            function checkAllReady() {
+                readersLoaded++;
+                if(readersLoaded >= 2) {
+                    finalizeSubmit(profileBase64, carBase64);
+                }
+            }
+
+            if(profileFile) {
+                let r1 = new FileReader();
+                r1.onload = function(ev) { profileBase64 = ev.target.result; checkAllReady(); };
+                r1.readAsDataURL(profileFile);
+            } else { checkAllReady(); }
+
+            if(carFile) {
+                let r2 = new FileReader();
+                r2.onload = function(ev) { carBase64 = ev.target.result; checkAllReady(); };
+                r2.readAsDataURL(carFile);
+            } else { checkAllReady(); }
+        });
+
+        function finalizeSubmit(pPhoto, cPhoto1) {
             let data = {
                 name: document.getElementById('reg_name').value,
                 profile_photo: pPhoto,
@@ -731,7 +758,7 @@ async def handle_driver_app(request):
             localStorage.setItem('safar_driver', JSON.stringify(data));
             try { tg.sendData(JSON.stringify(data)); } catch(err) {}
             showDashboard(data);
-        });
+        }
 
         document.getElementById('settingsForm').addEventListener('submit', function(e) {
             e.preventDefault();
