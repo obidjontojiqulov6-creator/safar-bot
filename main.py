@@ -533,20 +533,20 @@ async def handle_driver_app(request):
     <div id="registerScreen" class="tab-content active">
         <div class="card">
             <h2>🚖 Haydovchi Anketasi</h2>
-            <form id="regForm">
+            <form id="regForm" onsubmit="return false;">
                 <label>Ism va Familiya:</label>
-                <input type="text" id="reg_name" required placeholder="Sardor Rahimov">
+                <input type="text" id="reg_name" placeholder="Sardor Rahimov">
 
                 <label>Telefon raqam:</label>
-                <input type="tel" id="reg_phone" required placeholder="+998901234567">
+                <input type="tel" id="reg_phone" placeholder="+998901234567">
 
                 <label>Avtomobil rusumi va rangi:</label>
-                <input type="text" id="reg_car_model" required placeholder="Gentra (Oq)">
+                <input type="text" id="reg_car_model" placeholder="Gentra (Oq)">
 
                 <label>Avtomobil davlat raqami:</label>
-                <input type="text" id="reg_car_plate" required placeholder="01 A 777 AA">
+                <input type="text" id="reg_car_plate" placeholder="01 A 777 AA">
 
-                <button type="button" id="realSubmitBtn">Ro'yxatdan o'tish</button>
+                <button type="button" onclick="submitRegistration()">Ro'yxatdan o'tish</button>
             </form>
         </div>
     </div>
@@ -572,7 +572,7 @@ async def handle_driver_app(request):
         <div id="tab2" class="tab-content">
             <div class="card">
                 <h2>⚙️ Yo'nalish va Sozlamalar</h2>
-                <form id="settingsForm">
+                <form id="settingsForm" onsubmit="saveSettings(event)">
                     <label>Jo'nash shahri:</label>
                     <select id="set_from">{{OPTIONS_HTML}}</select>
 
@@ -648,8 +648,8 @@ async def handle_driver_app(request):
     </div>
 
     <script>
-        let tg = window.Telegram.WebApp;
-        try { tg.expand(); } catch(err) {}
+        let tg = window.Telegram ? window.Telegram.WebApp : null;
+        if(tg) { try { tg.expand(); } catch(e) {} }
 
         let openedOrders = [];
         try {
@@ -657,7 +657,11 @@ async def handle_driver_app(request):
         } catch(e) { openedOrders = []; }
 
         function initApp() {
-            let driverData = localStorage.getItem('safar_driver');
+            let driverData = null;
+            try {
+                driverData = localStorage.getItem('safar_driver');
+            } catch(e) {}
+
             if (driverData) {
                 try {
                     let parsed = JSON.parse(driverData);
@@ -667,14 +671,15 @@ async def handle_driver_app(request):
                     }
                 } catch(e) {}
             }
-            document.getElementById('registerScreen').style.display = 'block';
-            document.getElementById('registerScreen').classList.add('active');
+            let regScreen = document.getElementById('registerScreen');
+            regScreen.style.display = 'block';
+            regScreen.classList.add('active');
             document.getElementById('dashboardApp').style.display = 'none';
         }
 
         initApp();
 
-        document.getElementById('realSubmitBtn').addEventListener('click', function() {
+        function submitRegistration() {
             let name = document.getElementById('reg_name').value.trim();
             let phone = document.getElementById('reg_phone').value.trim();
             let carModel = document.getElementById('reg_car_model').value.trim();
@@ -699,15 +704,17 @@ async def handle_driver_app(request):
                 balance: 15000
             };
 
-            localStorage.setItem('safar_driver', JSON.stringify(data));
-            try { tg.sendData(JSON.stringify(data)); } catch(err) {}
+            try { localStorage.setItem('safar_driver', JSON.stringify(data)); } catch(e) {}
+            if(tg) { try { tg.sendData(JSON.stringify(data)); } catch(err) {} }
+            
             showDashboard(data);
-        });
+        }
 
-        document.getElementById('settingsForm').addEventListener('submit', function(e) {
+        function saveSettings(e) {
             e.preventDefault();
-            let data = JSON.parse(localStorage.getItem('safar_driver'));
-            if(!data) return;
+            let data = null;
+            try { data = JSON.parse(localStorage.getItem('safar_driver')); } catch(err) {}
+            if(!data) data = { name: "Haydovchi", balance: 15000 };
 
             data.from_city = document.getElementById('set_from').value;
             data.to_city = document.getElementById('set_to').value;
@@ -716,16 +723,19 @@ async def handle_driver_app(request):
             data.min_price = document.getElementById('set_min_price').value;
             data.min_delivery_price = document.getElementById('set_min_delivery_price').value;
 
-            localStorage.setItem('safar_driver', JSON.stringify(data));
-            try { tg.sendData(JSON.stringify(data)); } catch(err) {}
+            try { localStorage.setItem('safar_driver', JSON.stringify(data)); } catch(err) {}
             alert("Saqlandi!");
             loadOrders();
-        });
+        }
 
         function showDashboard(data) {
-            document.getElementById('registerScreen').style.display = 'none';
-            document.getElementById('registerScreen').classList.remove('active');
-            document.getElementById('dashboardApp').style.display = 'block';
+            let regScreen = document.getElementById('registerScreen');
+            let dashApp = document.getElementById('dashboardApp');
+
+            regScreen.style.display = 'none';
+            regScreen.classList.remove('active');
+            
+            dashApp.style.display = 'block';
 
             document.getElementById('p_img').innerText = (data.name ? data.name.charAt(0).toUpperCase() : "🚖");
             document.getElementById('p_name').innerText = data.name || '';
@@ -779,7 +789,8 @@ async def handle_driver_app(request):
         }
 
         function buyOrder(orderId) {
-            let driverData = JSON.parse(localStorage.getItem('safar_driver'));
+            let driverData = null;
+            try { driverData = JSON.parse(localStorage.getItem('safar_driver')); } catch(e) {}
             if (!driverData || driverData.balance < 3000) {
                 alert("⚠️ Balansizgizda yetarli pul yo'q! Iltimos, Balans bo'limidan to'ldiring.");
                 switchTab(4);
@@ -788,10 +799,10 @@ async def handle_driver_app(request):
 
             if (confirm("Ushbu buyurtma raqamini ochish uchun balansingizdan 3,000 so'm yechilsinmi?")) {
                 driverData.balance -= 3000;
-                localStorage.setItem('safar_driver', JSON.stringify(driverData));
+                try { localStorage.setItem('safar_driver', JSON.stringify(driverData)); } catch(e) {}
                 
                 openedOrders.push(orderId);
-                localStorage.setItem('opened_orders', JSON.stringify(openedOrders));
+                try { localStorage.setItem('opened_orders', JSON.stringify(openedOrders)); } catch(e) {}
 
                 document.getElementById('p_balance').innerText = driverData.balance;
                 document.getElementById('b_balance').innerText = driverData.balance;
@@ -813,22 +824,27 @@ async def handle_driver_app(request):
             }
             if(tabNum === 4) document.getElementById('tab4').classList.add('active');
 
-            document.querySelectorAll('.nav-item')[tabNum - 1].classList.add('active');
+            if(document.querySelectorAll('.nav-item')[tabNum - 1]) {
+                document.querySelectorAll('.nav-item')[tabNum - 1].classList.add('active');
+            }
         }
 
         function clearData() {
             if (confirm("Ma'lumotlarni o'chirib, qayta ro'yxatdan o'tasizmi?")) {
-                localStorage.removeItem('safar_driver');
-                localStorage.removeItem('opened_orders');
+                try {
+                    localStorage.removeItem('safar_driver');
+                    localStorage.removeItem('opened_orders');
+                } catch(e) {}
                 location.reload();
             }
         }
 
         function topUp(amount) {
-            let data = JSON.parse(localStorage.getItem('safar_driver'));
-            if(!data) return;
-            data.balance += amount;
-            localStorage.setItem('safar_driver', JSON.stringify(data));
+            let data = null;
+            try { data = JSON.parse(localStorage.getItem('safar_driver')); } catch(e) {}
+            if(!data) data = { name: "Haydovchi", balance: 0 };
+            data.balance = (data.balance || 0) + amount;
+            try { localStorage.setItem('safar_driver', JSON.stringify(data)); } catch(e) {}
             document.getElementById('p_balance').innerText = data.balance;
             document.getElementById('b_balance').innerText = data.balance;
             alert("✅ Balans muvaffaqiyatli to'ldirildi!");
