@@ -663,14 +663,8 @@ async def handle_driver_app(request):
     </div>
 
     <script>
-        document.addEventListener("DOMContentLoaded", function() {
-            try {
-                if (window.Telegram && window.Telegram.WebApp) {
-                    window.Telegram.WebApp.expand();
-                }
-            } catch(e) {}
-            initApp();
-        });
+        let tg = window.Telegram.WebApp;
+        try { tg.expand(); } catch(err) {}
 
         let openedOrders = [];
         try {
@@ -693,6 +687,8 @@ async def handle_driver_app(request):
             document.getElementById('dashboardApp').style.display = 'none';
         }
 
+        initApp();
+
         function processFile(inputId, hiddenId, statusId) {
             let fileInput = document.getElementById(inputId);
             let file = fileInput.files[0];
@@ -708,13 +704,13 @@ async def handle_driver_app(request):
 
         document.getElementById('regForm').addEventListener('submit', function(e) {
             e.preventDefault();
+            
             let pPhoto = document.getElementById('reg_profile_photo').value;
             let cPhoto1 = document.getElementById('reg_car_photo1').value;
 
-            if (!pPhoto || !cPhoto1) {
-                alert("Iltimos, ikkala rasmni ham tanlang!");
-                return;
-            }
+            // Agar rasm hali FileReader orqali o'qib bo'lmagan bo'lsa, vaqtinchalik standart rasm beramiz
+            if (!pPhoto) pPhoto = "https://via.placeholder.com/90";
+            if (!cPhoto1) cPhoto1 = "https://via.placeholder.com/300x180";
 
             let data = {
                 name: document.getElementById('reg_name').value,
@@ -733,7 +729,7 @@ async def handle_driver_app(request):
             };
 
             localStorage.setItem('safar_driver', JSON.stringify(data));
-            try { window.Telegram.WebApp.sendData(JSON.stringify(data)); } catch(err) {}
+            try { tg.sendData(JSON.stringify(data)); } catch(err) {}
             showDashboard(data);
         });
 
@@ -750,7 +746,7 @@ async def handle_driver_app(request):
             data.min_delivery_price = document.getElementById('set_min_delivery_price').value;
 
             localStorage.setItem('safar_driver', JSON.stringify(data));
-            try { window.Telegram.WebApp.sendData(JSON.stringify(data)); } catch(err) {}
+            try { tg.sendData(JSON.stringify(data)); } catch(err) {}
             alert("Saqlandi!");
             loadOrders();
         });
