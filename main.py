@@ -331,6 +331,9 @@ async def get_weight(message: types.Message, state: FSMContext):
         builder.adjust(2, 2, 2, 2, 2, 2, 1)
         return await message.answer(f"🏁 Qayerga jo'natasiz? (Jo'natish: {from_city})", reply_markup=builder.as_markup(resize_keyboard=True))
 
+    if not message.text:
+        return await message.answer("⚠️ Iltimos, og'irlikni matn ko'rinishida kiriting!")
+
     await state.update_data(weight=message.text)
     await state.set_state(BookingState.waiting_for_price)
 
@@ -339,8 +342,9 @@ async def get_weight(message: types.Message, state: FSMContext):
     builder.adjust(1)
     await message.answer("💵 Yukni yetkazib berish uchun bermoqchi bo'lgan pulingizni (haqini) kiriting:", reply_markup=builder.as_markup(resize_keyboard=True))
 
-@dp.message(BookingState.waiting_for_price)
-async def enter_price(message: types.Message, state: FSMContext):
+# FOIZ VA FAOAT MATN BO'LISHINI TEKSHIRISH
+@dp.message(BookingState.waiting_for_price, F.text)
+async def enter_price_text(message: types.Message, state: FSMContext):
     data = await state.get_data()
     lang = data.get("lang", "uz")
     order_type = data.get("order_type", "passenger")
@@ -365,6 +369,11 @@ async def enter_price(message: types.Message, state: FSMContext):
 
     await message.answer("📞 Aloqa uchun telefon raqamingizni yuboring:", reply_markup=builder.as_markup(resize_keyboard=True))
 
+# AGAR PRICE BOSQICHIDA LOKATSIYA YOKI BOSHQA FAYL YUBORILSA
+@dp.message(BookingState.waiting_for_price)
+async def enter_price_invalid(message: types.Message, state: FSMContext):
+    await message.answer("⚠️ Iltimos, summani matn/raqamlarda kiriting! (Lokatsiya yoki boshqa media yubormang)")
+
 @dp.message(BookingState.waiting_for_contact, F.contact)
 async def get_contact_obj(message: types.Message, state: FSMContext):
     phone = message.contact.phone_number
@@ -373,17 +382,9 @@ async def get_contact_obj(message: types.Message, state: FSMContext):
 
 @dp.message(BookingState.waiting_for_contact)
 async def wrong_contact(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-    if message.contact:
-        phone = message.contact.phone_number
-        await state.update_data(phone=phone)
-        return await ask_location_step(message, state)
-    
     await message.answer("⚠️ Iltimos, pastdagi '📱 Kontaktni yuborish' tugmasini bosing!")
 
 async def ask_location_step(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-
     await state.set_state(BookingState.waiting_for_location)
     builder = ReplyKeyboardBuilder()
     builder.button(text="📍 Jonli lokatsiyani yuborish", request_location=True)
@@ -400,12 +401,6 @@ async def get_location_obj(message: types.Message, state: FSMContext):
 
 @dp.message(BookingState.waiting_for_location)
 async def wrong_location(message: types.Message, state: FSMContext):
-    if message.location:
-        lat = message.location.latitude
-        lon = message.location.longitude
-        await state.update_data(lat=lat, lon=lon)
-        return await ask_comment_step(message, state)
-        
     await message.answer("⚠️ Iltimos, pastdagi '📍 Jonli lokatsiyani yuborish' tugmasini bosing!")
 
 async def ask_comment_step(message: types.Message, state: FSMContext):
@@ -423,7 +418,7 @@ async def ask_comment_step(message: types.Message, state: FSMContext):
 async def get_comment(message: types.Message, state: FSMContext):
     data = await state.get_data()
     lang = data.get("lang", "uz")
-    text = message.text
+    text = message.text if message.text else ""
 
     comment = "" if text in ["⏭️ O'tkazib yuborish", "⏭️ Пропустить"] else text
     name = message.from_user.first_name
