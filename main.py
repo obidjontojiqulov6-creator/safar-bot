@@ -39,12 +39,10 @@ ORDERS = {
     }
 }
 
-DRIVERS = {}      
 ALL_USERS = set()
 DAILY_VISITS = set()
 LAST_VISIT_DATE = datetime.now().date()
-
-ADMIN_ID = 123456789  # Telegram ID raqamingiz
+ADMIN_ID = 123456789
 
 class BookingState(StatesGroup):
     waiting_for_lang = State()
@@ -581,21 +579,21 @@ async def handle_driver_app(request):
     <div id="registerScreen" class="tab-content active">
         <div class="card">
             <h2>🚖 Haydovchi Anketasi</h2>
-            <form id="regForm" onsubmit="submitRegistration(event);">
+            <div id="regForm">
                 <label>Ism va Familiya:</label>
-                <input type="text" id="reg_name" placeholder="Sardor Rahimov" required>
+                <input type="text" id="reg_name" placeholder="Sardor Rahimov">
 
                 <label>Telefon raqam:</label>
-                <input type="tel" id="reg_phone" placeholder="+998901234567" required>
+                <input type="tel" id="reg_phone" placeholder="+998901234567">
 
                 <label>Avtomobil rusumi va rangi:</label>
-                <input type="text" id="reg_car_model" placeholder="Gentra (Oq)" required>
+                <input type="text" id="reg_car_model" placeholder="Gentra (Oq)">
 
                 <label>Avtomobil davlat raqami:</label>
-                <input type="text" id="reg_car_plate" placeholder="01 A 777 AA" required>
+                <input type="text" id="reg_car_plate" placeholder="01 A 777 AA">
 
-                <button type="submit">Ro'yxatdan o'tish</button>
-            </form>
+                <button type="button" onclick="submitRegistration()">Ro'yxatdan o'tish</button>
+            </div>
         </div>
     </div>
 
@@ -620,7 +618,7 @@ async def handle_driver_app(request):
         <div id="tab2" class="tab-content">
             <div class="card">
                 <h2>⚙️ Yo'nalish va Sozlamalar</h2>
-                <form id="settingsForm" onsubmit="saveSettings(event)">
+                <div id="settingsForm">
                     <label>Jo'nash shahri:</label>
                     <select id="set_from">{{OPTIONS_HTML}}</select>
 
@@ -648,8 +646,8 @@ async def handle_driver_app(request):
                     <label>Dastavka / Pochta narxi (eng kam so'mda):</label>
                     <input type="number" id="set_min_delivery_price" value="30000">
 
-                    <button type="submit">Saqlash</button>
-                </form>
+                    <button type="button" onclick="saveSettings()">Saqlash</button>
+                </div>
             </div>
         </div>
 
@@ -727,9 +725,7 @@ async def handle_driver_app(request):
 
         initApp();
 
-        function submitRegistration(e) {
-            if(e) e.preventDefault();
-
+        function submitRegistration() {
             let name = document.getElementById('reg_name').value.trim();
             let phone = document.getElementById('reg_phone').value.trim();
             let carModel = document.getElementById('reg_car_model').value.trim();
@@ -737,7 +733,7 @@ async def handle_driver_app(request):
 
             if (!name || !phone || !carModel || !carPlate) {
                 alert("Iltimos, barcha maydonlarni to'ldiring!");
-                return false;
+                return;
             }
 
             let data = {
@@ -758,11 +754,9 @@ async def handle_driver_app(request):
             if(tg && tg.sendData) { try { tg.sendData(JSON.stringify(data)); } catch(err) {} }
             
             showDashboard(data);
-            return false;
         }
 
-        function saveSettings(e) {
-            e.preventDefault();
+        function saveSettings() {
             let data = null;
             try { data = JSON.parse(localStorage.getItem('safar_driver')); } catch(err) {}
             if(!data) data = { name: "Haydovchi", balance: 15000 };
