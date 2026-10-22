@@ -518,7 +518,6 @@ async def handle_driver_app(request):
             margin: 0; padding-bottom: 70px;
         }
         .tab-content { display: none; padding: 16px; }
-        .tab-content.active { display: block !important; }
         
         .nav-bar {
             position: fixed; bottom: 0; left: 0; width: 100%;
@@ -576,7 +575,7 @@ async def handle_driver_app(request):
 <body>
 
     <!-- RO'YXATDAN O'TISH SAHIFASI -->
-    <div id="registerScreen" class="tab-content active">
+    <div id="registerScreen" class="tab-content" style="display: block;">
         <div class="card">
             <h2>🚖 Haydovchi Anketasi</h2>
             <div id="regForm">
@@ -717,9 +716,7 @@ async def handle_driver_app(request):
                     }
                 } catch(e) {}
             }
-            let regScreen = document.getElementById('registerScreen');
-            regScreen.style.display = 'block';
-            regScreen.classList.add('active');
+            document.getElementById('registerScreen').style.display = 'block';
             document.getElementById('dashboardApp').style.display = 'none';
         }
 
@@ -774,13 +771,8 @@ async def handle_driver_app(request):
         }
 
         function showDashboard(data) {
-            let regScreen = document.getElementById('registerScreen');
-            let dashApp = document.getElementById('dashboardApp');
-
-            regScreen.classList.remove('active');
-            regScreen.style.display = 'none';
-            
-            dashApp.style.display = 'block';
+            document.getElementById('registerScreen').style.display = 'none';
+            document.getElementById('dashboardApp').style.display = 'block';
 
             document.getElementById('p_img').innerText = (data.name ? data.name.charAt(0).toUpperCase() : "🚖");
             document.getElementById('p_name').innerText = data.name || '';
@@ -858,16 +850,16 @@ async def handle_driver_app(request):
         }
 
         function switchTab(tabNum) {
-            document.querySelectorAll('#dashboardApp .tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('#dashboardApp .tab-content').forEach(el => el.style.display = 'none');
             document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
 
-            if(tabNum === 1) document.getElementById('tab1').classList.add('active');
-            if(tabNum === 2) document.getElementById('tab2').classList.add('active');
+            if(tabNum === 1) document.getElementById('tab1').style.display = 'block';
+            if(tabNum === 2) document.getElementById('tab2').style.display = 'block';
             if(tabNum === 3) {
-                document.getElementById('tab3').classList.add('active');
+                document.getElementById('tab3').style.display = 'block';
                 loadOrders();
             }
-            if(tabNum === 4) document.getElementById('tab4').classList.add('active');
+            if(tabNum === 4) document.getElementById('tab4').style.display = 'block';
 
             if(document.querySelectorAll('.nav-item')[tabNum - 1]) {
                 document.querySelectorAll('.nav-item')[tabNum - 1].classList.add('active');
