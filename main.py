@@ -342,7 +342,6 @@ async def get_weight(message: types.Message, state: FSMContext):
     builder.adjust(1)
     await message.answer("💵 Yukni yetkazib berish uchun bermoqchi bo'lgan pulingizni (haqini) kiriting:", reply_markup=builder.as_markup(resize_keyboard=True))
 
-# SUMMA KIRITISH BOSQICHI (O'ZGARISHSIZ)
 @dp.message(BookingState.waiting_for_price, F.text)
 async def enter_price_text(message: types.Message, state: FSMContext):
     data = await state.get_data()
@@ -383,7 +382,6 @@ async def get_contact_obj(message: types.Message, state: FSMContext):
 async def wrong_contact(message: types.Message, state: FSMContext):
     await message.answer("⚠️ Iltimos, pastdagi '📱 Kontaktni yuborish' tugmasini bosing!")
 
-# JOYLASHUVNI YUBORISH BOSQICHI (QAYTA YOZILDI)
 async def ask_location_step(message: types.Message, state: FSMContext):
     data = await state.get_data()
     lang = data.get("lang", "uz")
@@ -583,20 +581,20 @@ async def handle_driver_app(request):
     <div id="registerScreen" class="tab-content active">
         <div class="card">
             <h2>🚖 Haydovchi Anketasi</h2>
-            <form id="regForm" onsubmit="return false;">
+            <form id="regForm" onsubmit="submitRegistration(event);">
                 <label>Ism va Familiya:</label>
-                <input type="text" id="reg_name" placeholder="Sardor Rahimov">
+                <input type="text" id="reg_name" placeholder="Sardor Rahimov" required>
 
                 <label>Telefon raqam:</label>
-                <input type="tel" id="reg_phone" placeholder="+998901234567">
+                <input type="tel" id="reg_phone" placeholder="+998901234567" required>
 
                 <label>Avtomobil rusumi va rangi:</label>
-                <input type="text" id="reg_car_model" placeholder="Gentra (Oq)">
+                <input type="text" id="reg_car_model" placeholder="Gentra (Oq)" required>
 
                 <label>Avtomobil davlat raqami:</label>
-                <input type="text" id="reg_car_plate" placeholder="01 A 777 AA">
+                <input type="text" id="reg_car_plate" placeholder="01 A 777 AA" required>
 
-                <button type="button" onclick="submitRegistration()">Ro'yxatdan o'tish</button>
+                <button type="submit">Ro'yxatdan o'tish</button>
             </form>
         </div>
     </div>
@@ -729,7 +727,9 @@ async def handle_driver_app(request):
 
         initApp();
 
-        function submitRegistration() {
+        function submitRegistration(e) {
+            if(e) e.preventDefault();
+
             let name = document.getElementById('reg_name').value.trim();
             let phone = document.getElementById('reg_phone').value.trim();
             let carModel = document.getElementById('reg_car_model').value.trim();
@@ -737,7 +737,7 @@ async def handle_driver_app(request):
 
             if (!name || !phone || !carModel || !carPlate) {
                 alert("Iltimos, barcha maydonlarni to'ldiring!");
-                return;
+                return false;
             }
 
             let data = {
@@ -755,9 +755,10 @@ async def handle_driver_app(request):
             };
 
             try { localStorage.setItem('safar_driver', JSON.stringify(data)); } catch(e) {}
-            if(tg) { try { tg.sendData(JSON.stringify(data)); } catch(err) {} }
+            if(tg && tg.sendData) { try { tg.sendData(JSON.stringify(data)); } catch(err) {} }
             
             showDashboard(data);
+            return false;
         }
 
         function saveSettings(e) {
@@ -782,8 +783,8 @@ async def handle_driver_app(request):
             let regScreen = document.getElementById('registerScreen');
             let dashApp = document.getElementById('dashboardApp');
 
-            regScreen.style.display = 'none';
             regScreen.classList.remove('active');
+            regScreen.style.display = 'none';
             
             dashApp.style.display = 'block';
 
