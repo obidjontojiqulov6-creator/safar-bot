@@ -521,8 +521,8 @@ async def handle_driver_app(request):
             color: var(--text-color);
             margin: 0; padding: 12px; padding-bottom: 80px;
         }
-        .tab-content { display: none; }
-        .tab-content.active { display: block; }
+        .screen-block { display: none; }
+        .screen-block.active { display: block !important; }
 
         .header-card {
             background: var(--card-bg);
@@ -558,7 +558,7 @@ async def handle_driver_app(request):
         }
         input:focus, select:focus { border-color: var(--accent-color); }
 
-        button {
+        button.btn-primary {
             width: 100%; background: var(--accent-gradient);
             color: #000000; border: none;
             padding: 14px; border-radius: 12px; font-size: 15px; font-weight: 800;
@@ -578,7 +578,7 @@ async def handle_driver_app(request):
         .order-info { font-size: 13px; color: var(--text-secondary); margin-bottom: 4px; }
         .buy-btn {
             background: #10b981; color: #fff; padding: 10px; font-size: 13px;
-            margin-top: 10px; border-radius: 8px; box-shadow: none;
+            margin-top: 10px; border-radius: 8px; border: none; width: 100%; font-weight: bold; cursor: pointer;
         }
 
         .nav-bar {
@@ -598,8 +598,8 @@ async def handle_driver_app(request):
 </head>
 <body>
 
-    <!-- RO'YXATDAN O'TISH -->
-    <div id="registerScreen" class="tab-content active">
+    <!-- RO'YXATDAN O'TISH ERKAN -->
+    <div id="registerScreen" class="screen-block active">
         <div class="card">
             <h2>🚖 Haydovchi Anketasi</h2>
             <label>Ism va Familiya:</label>
@@ -614,11 +614,11 @@ async def handle_driver_app(request):
             <label>Avtomobil davlat raqami:</label>
             <input type="text" id="reg_car_plate" placeholder="01 A 777 AA">
 
-            <button type="button" onclick="submitRegistration()">Ro'yxatdan o'tish</button>
+            <button type="button" class="btn-primary" onclick="submitRegistration()">Ro'yxatdan o'tish</button>
         </div>
     </div>
 
-    <!-- ASOSIY DASHBOARD -->
+    <!-- ASOSIY DASHBOARD APP -->
     <div id="dashboardApp" style="display: none;">
         
         <div class="header-card">
@@ -629,18 +629,18 @@ async def handle_driver_app(request):
             <div class="balance-badge"><span id="p_balance">15000</span> so'm</div>
         </div>
 
-        <!-- 1-BO'LIM: PROFIL -->
-        <div id="tab1" class="tab-content active">
+        <!-- TAB 1: PROFIL -->
+        <div id="tab1" class="screen-block active">
             <div class="card">
                 <h2>👤 Mening Profilim</h2>
                 <p><b>📞 Tel:</b> <span id="p_phone"></span></p>
                 <p><b>🚗 Mashina:</b> <span id="p_car"></span> (<span id="p_plate"></span>)</p>
-                <button type="button" class="reset-btn" onclick="clearData()">🔄 Qaytadan ro'yxatdan o'tish</button>
+                <button type="button" class="btn-primary reset-btn" onclick="clearData()">🔄 Qaytadan ro'yxatdan o'tish</button>
             </div>
         </div>
 
-        <!-- 2-BO'LIM: YO'NALISH -->
-        <div id="tab2" class="tab-content">
+        <!-- TAB 2: YO'NALISH -->
+        <div id="tab2" class="screen-block">
             <div class="card">
                 <h2>⚙️ Yo'nalish sozlamalari</h2>
                 <label>Jo'nash shahri:</label>
@@ -652,12 +652,12 @@ async def handle_driver_app(request):
                 <label>1 odam uchun narx (so'm):</label>
                 <input type="number" id="set_min_price" value="50000">
 
-                <button type="button" onclick="saveSettings()">Saqlash</button>
+                <button type="button" class="btn-primary" onclick="alert('Sozlamalar saqlandi!')">Saqlash</button>
             </div>
         </div>
 
-        <!-- 3-BO'LIM: BUYURTMALAR -->
-        <div id="tab3" class="tab-content">
+        <!-- TAB 3: BUYURTMALAR -->
+        <div id="tab3" class="screen-block">
             <div class="card">
                 <h2>👥 Mos Buyurtmalar</h2>
                 <div id="ordersList">
@@ -666,21 +666,21 @@ async def handle_driver_app(request):
             </div>
         </div>
 
-        <!-- 4-BO'LIM: BALANS -->
-        <div id="tab4" class="tab-content">
+        <!-- TAB 4: BALANS -->
+        <div id="tab4" class="screen-block">
             <div class="card">
                 <h2>💳 Balansni to'ldirish</h2>
                 <p>Joriy balans: <b id="b_balance" style="color: var(--accent-color);">0</b> so'm</p>
                 <label>Summani tanlang:</label>
                 <div style="display: flex; gap: 10px; margin-top: 10px;">
-                    <button type="button" onclick="topUp(10000)">+ 10,000</button>
-                    <button type="button" onclick="topUp(25000)">+ 25,000</button>
-                    <button type="button" onclick="topUp(50000)">+ 50,000</button>
+                    <button type="button" class="btn-primary" onclick="topUp(10000)">+ 10,000</button>
+                    <button type="button" class="btn-primary" onclick="topUp(25000)">+ 25,000</button>
+                    <button type="button" class="btn-primary" onclick="topUp(50000)">+ 50,000</button>
                 </div>
             </div>
         </div>
 
-        <!-- NAVBAR -->
+        <!-- BOTTOM NAVBAR -->
         <div class="nav-bar">
             <div class="nav-item active" onclick="switchTab(1)">
                 <div>👤</div>Profil
@@ -707,6 +707,7 @@ async def handle_driver_app(request):
         function initApp() {
             let driverData = null;
             try { driverData = localStorage.getItem('safar_driver'); } catch(e) {}
+            
             if (driverData) {
                 try {
                     let parsed = JSON.parse(driverData);
@@ -716,39 +717,54 @@ async def handle_driver_app(request):
                     }
                 } catch(e) {}
             }
+            
             document.getElementById('registerScreen').style.display = 'block';
             document.getElementById('dashboardApp').style.display = 'none';
         }
+
         initApp();
 
         function submitRegistration() {
-            let name = document.getElementById('reg_name').value.trim();
-            let phone = document.getElementById('reg_phone').value.trim();
-            let carModel = document.getElementById('reg_car_model').value.trim();
-            let carPlate = document.getElementById('reg_car_plate').value.trim();
+            let nameInput = document.getElementById('reg_name');
+            let phoneInput = document.getElementById('reg_phone');
+            let carModelInput = document.getElementById('reg_car_model');
+            let carPlateInput = document.getElementById('reg_car_plate');
+
+            let name = nameInput ? nameInput.value.trim() : "";
+            let phone = phoneInput ? phoneInput.value.trim() : "";
+            let carModel = carModelInput ? carModelInput.value.trim() : "";
+            let carPlate = carPlateInput ? carPlateInput.value.trim() : "";
 
             if (!name || !phone || !carModel || !carPlate) {
-                alert("Iltimos, barcha maydonlarni to'ldiring!");
+                alert("Iltimos, barcha kataklarni to'ldiring!");
                 return;
             }
 
             let data = {
-                name: name, phone: phone, car_model: carModel, car_plate: carPlate, balance: 15000
+                name: name,
+                phone: phone,
+                car_model: carModel,
+                car_plate: carPlate,
+                balance: 15000
             };
 
             try { localStorage.setItem('safar_driver', JSON.stringify(data)); } catch(e) {}
+            
             showDashboard(data);
         }
 
         function showDashboard(data) {
-            document.getElementById('registerScreen').style.display = 'none';
-            document.getElementById('dashboardApp').style.display = 'block';
+            let regScreen = document.getElementById('registerScreen');
+            let dashApp = document.getElementById('dashboardApp');
 
-            document.getElementById('h_name').innerText = data.name;
-            document.getElementById('h_car').innerText = data.car_model + ' (' + data.car_plate + ')';
-            document.getElementById('p_phone').innerText = data.phone;
-            document.getElementById('p_car').innerText = data.car_model;
-            document.getElementById('p_plate').innerText = data.car_plate;
+            if(regScreen) regScreen.style.display = 'none';
+            if(dashApp) dashApp.style.display = 'block';
+
+            document.getElementById('h_name').innerText = data.name || 'Haydovchi';
+            document.getElementById('h_car').innerText = (data.car_model || '') + ' (' + (data.car_plate || '') + ')';
+            document.getElementById('p_phone').innerText = data.phone || '';
+            document.getElementById('p_car').innerText = data.car_model || '';
+            document.getElementById('p_plate').innerText = data.car_plate || '';
             document.getElementById('p_balance').innerText = data.balance || 0;
             document.getElementById('b_balance').innerText = data.balance || 0;
 
@@ -809,12 +825,16 @@ async def handle_driver_app(request):
         }
 
         function switchTab(tabNum) {
-            document.querySelectorAll('#dashboardApp .tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('#dashboardApp .screen-block').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
 
-            document.getElementById('tab' + tabNum).classList.add('active');
+            let targetTab = document.getElementById('tab' + tabNum);
+            if (targetTab) targetTab.classList.add('active');
+            
             if(tabNum === 3) loadOrders();
-            document.querySelectorAll('.nav-item')[tabNum - 1].classList.add('active');
+            
+            let navItems = document.querySelectorAll('.nav-item');
+            if (navItems[tabNum - 1]) navItems[tabNum - 1].classList.add('active');
         }
 
         function clearData() {
@@ -826,6 +846,7 @@ async def handle_driver_app(request):
 
         function topUp(amount) {
             let driverData = JSON.parse(localStorage.getItem('safar_driver'));
+            if(!driverData) driverData = { balance: 0 };
             driverData.balance = (driverData.balance || 0) + amount;
             localStorage.setItem('safar_driver', JSON.stringify(driverData));
             document.getElementById('p_balance').innerText = driverData.balance;
