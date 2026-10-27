@@ -1,4 +1,77 @@
-  Taxi: O'zbekiston bo'ylab taksi va yuk yuborishni oson toping.\n"
+"""Safar Taxi: yo'lovchi va yuk yuboruvchilar boti (to'liq versiya).
+
+Render -> Environment:  BOT_TOKEN, DATABASE_URL
+requirements.txt:       aiogram==3.13.1, asyncpg, aiohttp
+"""
+import asyncio
+import logging
+import os
+
+import aiohttp
+import asyncpg
+from aiogram import Bot, Dispatcher, F
+from aiogram.exceptions import TelegramBadRequest
+from aiogram.filters import CommandStart, StateFilter
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import (
+    CallbackQuery, InlineKeyboardButton as IB, InlineKeyboardMarkup as IM,
+    KeyboardButton, Message, ReplyKeyboardMarkup, ReplyKeyboardRemove,
+)
+from aiohttp import web
+
+import driver  # haydovchi boti va Mini App (driver.py)
+
+logging.basicConfig(level=logging.INFO)
+
+BOT_TOKEN = os.environ["BOT_TOKEN"]
+DATABASE_URL = os.environ["DATABASE_URL"].replace("&channel_binding=require", "")
+PORT = int(os.environ.get("PORT", 10000))
+SELF_URL = os.environ.get("RENDER_EXTERNAL_URL")  # Render o'zi beradi
+
+MAX_PEOPLE = 4
+REFUND_PERCENT = 70  # rad etilganda haydovchiga qaytariladigan ulush
+
+bot = Bot(BOT_TOKEN)
+dp = Dispatcher(storage=MemoryStorage())
+pool: asyncpg.Pool | None = None
+busy: set[int] = set()
+
+
+class Flow(StatesGroup):
+    s = State()
+
+
+# ---------------------------------------------------------------- Viloyatlar
+# (lotin, kirill, rus). Bazaga lotin nomi yoziladi.
+REG = [
+    ("Toshkent", "Тошкент", "Ташкент"),
+    ("Nurafshon", "Нурафшон", "Нурафшон"),
+    ("Andijon", "Андижон", "Андижан"),
+    ("Buxoro", "Бухоро", "Бухара"),
+    ("Farg'ona", "Фарғона", "Фергана"),
+    ("Jizzax", "Жиззах", "Джизак"),
+    ("Namangan", "Наманган", "Наманган"),
+    ("Navoiy", "Навоий", "Навои"),
+    ("Qarshi", "Қарши", "Карши"),
+    ("Samarqand", "Самарқанд", "Самарканд"),
+    ("Guliston", "Гулистон", "Гулистан"),
+    ("Termiz", "Термиз", "Термез"),
+    ("Urganch", "Урганч", "Ургенч"),
+    ("Nukus", "Нукус", "Нукус"),
+]
+LI = {"uz": 0, "oz": 1, "ru": 2}
+
+
+def reg(lang: str, idx: int) -> str:
+    return REG[idx][LI[lang]]
+
+
+# ---------------------------------------------------------------- Matnlar
+START_TEXT = (
+    "👋 Assalomu alaykum! / Здравствуйте!\n\n"
+    "🚕 Safar Taxi: O'zbekiston bo'ylab taksi va yuk yuborishni oson toping.\n"
     "🚕 Safar Taxi: легко находите такси и отправку грузов по всему Узбекистану.\n\n"
     "Tilni tanlang / Выберите язык:"
 )
@@ -606,8 +679,9 @@ async def health(_):
 
 
 async def run_web():
-    app = web.Application()
+    app = web.Application(client_max_size=8 * 1024 * 1024)
     app.router.add_get("/", health)
+    driver.add_routes(app)
     runner = web.AppRunner(app)
     await runner.setup()
     await web.TCPSite(runner, "0.0.0.0", PORT).start()
@@ -630,12 +704,16 @@ async def keepalive():
 
 async def main():
     await init_db()
+    await driver.setup(pool)
     await run_web()
     asyncio.create_task(keepalive())
     # bot o'chib turgan paytda sotib olingan, lekin xabar yuborilmagan buyurtmalar
     for r in await pool.fetch("SELECT id FROM purchases WHERE status='active' AND NOT notified"):
         await notify_purchase(r["id"])
-    await dp.start_polling(bot)
+    jobs = [dp.start_polling(bot)]
+    if driver.enabled:
+        jobs.append(driver.dp.start_polling(driver.bot, handle_signals=False))
+    await asyncio.gather(*jobs)
 
 
 if __name__ == "__main__":
